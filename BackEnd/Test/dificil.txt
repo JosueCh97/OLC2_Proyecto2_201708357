@@ -1,0 +1,458 @@
+// ======================================================
+// DIFICIL.TXT - PRUEBA INTEGRAL BASADA EN RÚBRICA
+// HojaCalificacion.pdf (Proyecto 1)
+//
+// Incluye:
+// - Funcionalidades básicas/intermedias
+// - Funciones (recursivas, múltiples retornos, referencia)
+// - Arreglos 1D/2D/3D
+// - Funciones embebidas
+// - Casos para reporte de errores (comentados)
+//
+// NOTA:
+// - Hay prints que SI deben salir en consola.
+// - Hay prints marcados como NO_DEBERIA_IMPRIMIR que NO deben salir.
+// ======================================================
+
+// -----------------------------
+// 3.1 Función sin parámetros
+// -----------------------------
+func imprimirArbol() {
+    print("      *")
+    print("     ***")
+    print("    *****")
+    print("   *******")
+    print("      |")
+}
+
+// -----------------------------
+// Función auxiliar para validar cortocircuito
+// Si se ejecuta, imprime etiqueta
+// -----------------------------
+func sideEffect(tag string) bool {
+    print("SIDE_EFFECT:", tag)
+    return true
+}
+
+// -----------------------------
+// 3.2 Función no recursiva con parámetros
+// -----------------------------
+func calcularVolumenPiramide(base float32, altura float32) float32 {
+    return (base * altura) / 3.0
+}
+
+// -----------------------------
+// 3.3 Funciones por referencia
+// -----------------------------
+func intercambioValores(a *int32, b *int32) {
+    temp := *a
+    *a = *b
+    *b = temp
+}
+
+func ordenamientoSeleccion(arr *[6]int32) {
+    for i := 0; i < 5; i++ {
+        var minIdx int32 = i
+        for j := i + 1; j < 6; j++ {
+            if arr[j] < arr[minIdx] {
+                minIdx = j
+            }
+        }
+        if minIdx != i {
+            intercambioValores(&arr[i], &arr[minIdx])
+        }
+    }
+}
+
+// -----------------------------
+// 3.4 Múltiple retorno no recursiva
+// -----------------------------
+func division(a int32, b int32) (int32, bool) {
+    if b == 0 {
+        return 0, false
+    }
+    return a / b, true
+}
+
+// -----------------------------
+// 3.4 Recursiva un retorno
+// -----------------------------
+func potencia(base int32, exp int32) int32 {
+    if exp == 0 {
+        return 1
+    }
+    return base * potencia(base, exp-1)
+}
+
+// -----------------------------
+// 3.5 Recursiva múltiple retorno (Euclides)
+// -----------------------------
+func euclides(a int32, b int32) (int32, int32) {
+    if b == 0 {
+        return a, 0
+    }
+
+    gcd, depth := euclides(b, a%b)
+    return gcd, depth + 1
+}
+
+// -----------------------------
+// 5.6 Índice de inestabilidad por fila (matriz)
+// Suma de diferencias absolutas consecutivas por fila
+// -----------------------------
+func indiceInestabilidadPorFila(m [3][4]int32) [3]int32 {
+    var res [3]int32
+    for i := 0; i < 3; i++ {
+        var acum int32 = 0
+        for j := 0; j < 3; j++ {
+            var diff int32 = m[i][j+1] - m[i][j]
+            if diff < 0 {
+                diff = -diff
+            }
+            acum += diff
+        }
+        res[i] = acum
+    }
+    return res
+}
+
+// -----------------------------
+// 5.7 Regla de Cramer (2x2)
+// Retorna (x, y, ok)
+// -----------------------------
+func reglaCramer2x2(a11 float32, a12 float32, b1 float32, a21 float32, a22 float32, b2 float32) (float32, float32, bool) {
+    var det float32 = a11*a22 - a12*a21
+    if det == 0.0 {
+        return 0.0, 0.0, false
+    }
+
+    var dx float32 = b1*a22 - a12*b2
+    var dy float32 = a11*b2 - b1*a21
+    return dx/det, dy/det, true
+}
+
+// -----------------------------
+// 5.8 Promedio de capas (cubo 2x2x2)
+// -----------------------------
+func promedioCapas(cubo [2][2][2]float32) [2]float32 {
+    var proms [2]float32
+    for z := 0; z < 2; z++ {
+        var sum float32 = 0.0
+        for i := 0; i < 2; i++ {
+            for j := 0; j < 2; j++ {
+                sum += cubo[z][i][j]
+            }
+        }
+        proms[z] = sum / 4.0
+    }
+    return proms
+}
+
+// -----------------------------
+// 5.9 Softmax (aprox) por fila de matriz 2x2
+// Usamos x^2 como aproximación positiva para evitar exp()
+// -----------------------------
+func softmaxAprox2x2(m [2][2]float32) [2][2]float32 {
+    var out [2][2]float32
+    for i := 0; i < 2; i++ {
+        var a float32 = m[i][0] * m[i][0]
+        var b float32 = m[i][1] * m[i][1]
+        var s float32 = a + b
+
+        if s == 0.0 {
+            out[i][0] = 0.5
+            out[i][1] = 0.5
+        } else {
+            out[i][0] = a / s
+            out[i][1] = b / s
+        }
+    }
+    return out
+}
+
+func main() {
+    print("=== INICIO DIFICIL ===")
+
+    // =========================================
+    // 1. Funcionalidades básicas
+    // =========================================
+
+    // 1.1 Declaración larga de variables
+    var entero int32 = 10
+    var decimal float32 = 2.5
+    var activo bool = true
+    var letra rune = 'Z'
+    var texto string = "OLC2"
+
+    print("1.1:", entero, decimal, activo, letra, texto)
+
+    // 1.5 Declaración larga sin inicializar
+    var e2 int32
+    var d2 float32
+    var a2 bool
+    var l2 rune
+    var t2 string
+    print("1.5 defaults:", e2, d2, a2, l2, t2)
+
+    // 1.6 Declaración múltiple
+    var m1, m2 int32 = 7, 9
+    print("1.6 larga multiple:", m1, m2)
+
+    // 1.4 Declaración corta
+    s1 := 100
+    s2 := 3.14
+    s3 := false
+    s4 := 'K'
+    s5 := "corta"
+    print("1.4:", s1, s2, s3, s4, s5)
+
+    // 1.6 Declaración corta múltiple
+    c1, c2 := 50, 60
+    print("1.6 corta multiple:", c1, c2)
+
+    // 1.7 Constantes
+    const max int32 = 1000
+    const pi float32 = 3.1416
+    print("1.7 const:", max, pi)
+
+    // 1.8 nil
+    // En este interprete no se permite declarar punteros fuera de parametros por referencia.
+    // Dejamos nil como literal valido para cobertura sintactica.
+    print("1.8 nil literal:", nil)
+
+    // 1.11 Aritméticas
+    var aa int32 = 14
+    var bb int32 = 5
+    print("+ - * / %:", aa+bb, aa-bb, aa*bb, aa/bb, aa%bb)
+
+    // 1.15 Operadores de asignación
+    var op int32 = 10
+    op += 5
+    op -= 2
+    op *= 3
+    op /= 4
+    op %= 5
+    print("1.15 op final:", op)
+
+    // 1.12 Relacionales
+    print("rel:", aa > bb, aa < bb, aa >= bb, aa <= bb, aa == bb, aa != bb)
+
+    // 1.13 Lógicas
+    var lA bool = true
+    var lB bool = false
+    print("logicas:", lA && lB, lA || lB, !lA)
+
+    // 1.14 Cortocircuito
+    if false && sideEffect("NO_DEBERIA_IMPRIMIR_AND") {
+        print("NO_DEBERIA_IMPRIMIR_BLOQUE_AND")
+    }
+    if true || sideEffect("NO_DEBERIA_IMPRIMIR_OR") {
+        print("cortocircuito OR OK")
+    }
+
+    // =========================================
+    // 2. Funcionalidades intermedias
+    // =========================================
+
+    // 2.2 if
+    if entero > 5 {
+        print("2.2 if OK")
+    }
+
+    // 2.3 if else
+    if entero < 0 {
+        print("NO_DEBERIA_IMPRIMIR_IF_ELSE")
+    } else {
+        print("2.3 else OK")
+    }
+
+    // if con init
+    if var k int32 = 3; k == 3 {
+        print("if init OK")
+    }
+
+    // 2.4 switch/case/default
+    var dia int32 = 2
+    switch dia {
+    case 1:
+        print("Lunes")
+    case 2, 3:
+        print("2.4 Martes o Miercoles")
+    default:
+        print("NO_DEBERIA_IMPRIMIR_SWITCH_DEFAULT")
+    }
+
+    // 2.5 for clásico + 2.8 break + 2.9 continue
+    for i := 0; i < 6; i++ {
+        if i == 2 {
+            print("continue en 2")
+            continue
+        }
+        if i == 5 {
+            print("break en 5")
+            break
+        }
+        print("for clasico i:", i)
+    }
+
+    // 2.6 for condicional
+    var w int32 = 3
+    for w > 0 {
+        print("for condicional w:", w)
+        w--
+    }
+
+    // 2.7 for infinito
+    var inf int32 = 0
+    for {
+        inf++
+        if inf == 2 {
+            print("for infinito detenido")
+            break
+        }
+    }
+
+    // =========================================
+    // 3. Funciones
+    // =========================================
+    imprimirArbol()
+
+    var vol float32 = calcularVolumenPiramide(30.0, 9.0)
+    print("3.2 volumen:", vol)
+
+    var datos [6]int32 = [6]int32{9, 3, 8, 2, 7, 1}
+    ordenamientoSeleccion(&datos)
+    print("3.3 ordenado:", datos[0], datos[1], datos[2], datos[3], datos[4], datos[5])
+
+    var q int32
+    var ok bool
+    q, ok = division(20, 4)
+    print("3.4 division 20/4:", q, ok)
+
+    q, ok = division(20, 0)
+    print("3.4 division 20/0:", q, ok)
+
+    print("3.4 potencia 2^8:", potencia(2, 8))
+
+    gcd, depth := euclides(48, 18)
+    print("3.5 euclides gcd/depth:", gcd, depth)
+
+    // =========================================
+    // 4. Funciones embebidas
+    // =========================================
+    var cadena string = "Compiladores"
+    print("4.2 len:", len(cadena))
+    print("4.4 substr:", substr(cadena, 0, 4))
+    print("4.5 typeOf:", typeOf(cadena))
+    print("4.3 now:", now())
+
+    // =========================================
+    // 5. Arreglos
+    // =========================================
+
+    // 5.1 No inicializado e inicializado
+    var ai [4]int32
+    var bi [4]int32 = [4]int32{10, 20, 30, 40}
+    print("5.1 ai:", ai[0], ai[1], ai[2], ai[3])
+    print("5.1 bi:", bi[0], bi[1], bi[2], bi[3])
+
+    // 5.2 Tipos estáticos
+    var ab [3]bool = [3]bool{true, false, true}
+    var ar [2]rune = [2]rune{'A', 'B'}
+    var as [2]string = [2]string{"uno", "dos"}
+    print("5.2 bool/rune/string:", ab[0], ar[1], as[0])
+
+    // 5.3 Acceso y modificación
+    bi[2] = 99
+    print("5.3 bi mod:", bi[0], bi[1], bi[2], bi[3])
+
+    // 5.4 Matriz inicializada y no inicializada
+    var mat0 [2][2]int32
+    var mat1 [3][4]int32 = [3][4]int32{
+        {1, 7, 3, 2},
+        {10, 12, 7, 1},
+        {2, 2, 2, 2},
+    }
+    print("5.4 mat0:", mat0[0][0], mat0[1][1])
+
+    // 5.5 Acceso y modificación matriz
+    mat1[1][2] = 100
+    print("5.5 mat1[1]:", mat1[1][0], mat1[1][1], mat1[1][2], mat1[1][3])
+
+    // 5.6 Función índice inestabilidad por fila
+    var inst [3]int32 = indiceInestabilidadPorFila(mat1)
+    print("5.6 inestabilidad:", inst[0], inst[1], inst[2])
+
+    // 5.7 Regla de Cramer
+    var x float32
+    var y float32
+    var solv bool
+    x, y, solv = reglaCramer2x2(2.0, 1.0, 5.0, 1.0, -1.0, 1.0)
+    print("5.7 cramer:", x, y, solv)
+
+    // 5.8 Promedio de capas cubo
+    var cubo [2][2][2]float32 = [2][2][2]float32{
+        {
+            {1.0, 2.0},
+            {3.0, 4.0},
+        },
+        {
+            {5.0, 6.0},
+            {7.0, 8.0},
+        },
+    }
+    var pc [2]float32 = promedioCapas(cubo)
+    print("5.8 promedio capas:", pc[0], pc[1])
+
+    // 5.9 Softmax aprox matriz retorno
+    var entrada [2][2]float32 = [2][2]float32{
+        {1.0, 2.0},
+        {3.0, 4.0},
+    }
+    var sm [2][2]float32 = softmaxAprox2x2(entrada)
+    print("5.9 softmax aprox fila0:", sm[0][0], sm[0][1])
+    print("5.9 softmax aprox fila1:", sm[1][0], sm[1][1])
+
+    // =========================================
+    // 7. Reportes (errores) y 8. Documentación
+    // =========================================
+    print("7.1 Tabla de simbolos: validar en reporte generado por el interprete")
+    print("7.2 Reporte de errores: usar bloque comentado al final")
+    print("8.1 Manual de usuario: verificar entrega en Docs")
+    print("8.2 Manual tecnico: verificar entrega en Docs")
+
+    print("=== FIN DIFICIL ===")
+}
+
+// ======================================================
+// BLOQUE DE ERRORES (DESCOMENTAR UNO POR UNO)
+// Para probar 7.2 Reporte de Errores
+// ======================================================
+
+// E1: Redeclaración en mismo scope
+// var z int32 = 1
+// var z int32 = 2
+
+// E2: Uso antes de declarar
+// print(noDeclarada)
+
+// E3: Asignación de tipo incompatible
+// var err int32 = "texto"
+
+// E4: Asignación a constante
+// const k int32 = 10
+// k = 20
+
+// E5: Break fuera de ciclo/switch
+// break
+
+// E6: Continue fuera de ciclo
+// continue
+
+// E7: Índice fuera de rango (si tu runtime lo reporta)
+// var t [2]int32 = [2]int32{1,2}
+// print(t[5])
+
+// E8: Nil dereference (si tu runtime lo reporta)
+// var p *int32 = nil
+// print(*p)
