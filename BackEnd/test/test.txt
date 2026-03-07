@@ -1,0 +1,4 @@
+var x int32 = 10
+var y int32 =  // <- ERROR INTENCIONAL (Le falta el número)
+var w, z int32  =1, 2
+var ws, zs int32  =1, 2

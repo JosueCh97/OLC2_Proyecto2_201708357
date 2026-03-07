@@ -1,0 +1,14 @@
+# Dependencias de PHP
+/vendor/
+
+# Archivos generados por la extensión de ANTLR en VS Code
+.antlr/
+
+# Archivos de entorno (Variables secretas, si llegas a usar)
+.env
+
+# Configuraciones de editores de código
+.vscode/
+.idea/
+*.swp
+
