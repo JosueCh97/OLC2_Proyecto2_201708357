@@ -1,5 +1,5 @@
 <?php
-namespace App\Expresiones;
+namespace App\Expressions;
 
 class Atributo {
     public string $id;

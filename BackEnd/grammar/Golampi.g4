@@ -13,7 +13,8 @@ instrucciones:
 
 instruccion: 
         declaracion
-        | asignacion; 
+        | asignacion
+        ; 
 
 listids:
         IDNAME
@@ -25,23 +26,31 @@ listaexp:
 
 
 declaracion:
-        TKVAR listids primitivos 
-        |TKVAR listids primitivos IGUAL listaexp;   
+        TKVAR listids optipo 
+        | TKVAR listids optipo IGUAL listaexp
+        | TKCONST listids optipo IGUAL listaexp;   
 
-
-asignacion:
-        listids ':=' expresion
-        | IDNAME IGUAL expresion;
+asignacion: listids IGUAL listaexp;
 
 
 
 
 expresion:
-        primitivos 
-  
-        |INT
-;
-primitivos:
+         // Operaciones aritméticas - ordenadas por precedencia (menor a mayor)
+         '-' expresion                             #ExprUnaria
+        | '(' expresion ')'                         #ExprAgrupacion
+        | expresion ('*' | '/' | '%') expresion     #ExprMultiplicacion
+        |expresion ('+' | '-') expresion             #ExprSuma
+        // Expresiones primarias
+        | INT                                       #ExprEntero
+        | FLOAT                                     #ExprDecimal
+        | BOOL                                      #ExprBooleano
+        | STRING                                    #ExprCadena
+        | IDNAME                                    #ExprIdentificador
+        ;
+
+
+optipo:
          TKINT 
         | TKFLOAT 
         | TKBOOL
@@ -60,7 +69,9 @@ TKSTRING: 'string';
 
 // ? TK asignacion
 TKVAR: 'var';
+TKCONST: 'const';
 IGUAL: '=';
+NIL: 'nil';
 //? Bloque de sentrencia principal */
 TKMAIN: 'main';
 
@@ -90,6 +101,8 @@ TKRETURN: 'return';
 
 
 BOOL: 'true' | 'false';
+STRING: '"' ( '\\' . | ~["\\] )* '"';
+UNICODE : '\\u' [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F];
 IDNAME: [a-zA-Z_][a-zA-Z0-9_]*;
 INT: [-]*[0-9][0-9]*;
 FLOAT: [-]*[0-9]+ '.' [0-9]+;

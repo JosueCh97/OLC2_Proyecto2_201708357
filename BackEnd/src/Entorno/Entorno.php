@@ -2,12 +2,13 @@
 namespace App\Entorno;
 
 use App\Utilities\Tipo;
-use App\Utilidades\Salida; // Asumiremos que crearás Salida::$salidasConsola
+use App\Utilities\Salida; // salida en consola
 use App\Instructions\Funcion;
 use App\Expresiones\Atributo;
 use App\Entorno\SimboloTabla;
 use App\Entorno\Objeto;
 use App\Entorno\Simbolo;
+
 
 
 class Entorno {
@@ -30,11 +31,11 @@ class Entorno {
     }
 
     // === Guardar Variable ===
-    public function guardarVariable(string $id, mixed $valor, Tipo $tipo, int $linea, int $columna): void {
+    public function guardarVariable(string $id, mixed $valor, Tipo $tipo, int $linea, int $columna , bool $isconstid = false ): void {
         $entorno = $this;
         if (!array_key_exists($id, $entorno->ids)) {
             // Guardar variable
-            $entorno->ids[$id] = new Simbolo($valor, $id, $tipo);
+            $entorno->ids[$id] = new Simbolo($valor, $id, $tipo, $isconstid);
             
             // Insertamos en la tabla de simbolos (usando una clase estática Tabla)
             //Tabla::$tablaSimbolos[] = new SimboloTabla($linea, $columna, true, true, $valor, $tipo, $id, $entorno->nombre);
@@ -57,17 +58,27 @@ class Entorno {
     }
 
     // === Actualizar Variable ===
-    public function setVariable(string $id, mixed $valor): void {
+
+
+    public function setVariable(string $id, mixed $valor): bool {
         $entorno = $this;
         while ($entorno !== null) {
             if (array_key_exists($id, $entorno->ids)) {
                 $simbolo = $entorno->ids[$id];
-                $simbolo->valor = $valor;
-                return;
+                
+                // Si es constante, bloqueamos la asignación
+                if (isset($simbolo->isConst) && $simbolo->isConst === true) {
+                    return false; 
+                }
+                
+                $simbolo->valor = $valor; // Actualizamos el valor
+                return true; // Éxito
             }
             $entorno = $entorno->anterior;
         }
+        return false; // La variable no existe
     }
+
 
     // === GUARDAR OBJETO ===
     /**
@@ -140,8 +151,8 @@ class Entorno {
         return null;
     }
 
-    // // === GESTIÓN DE CONSOLA ===
-    // public function setPrint(string $print): void {
-    //     Salida::$salidasConsola[] = $print;
-    // }
+    // === GESTIÓN DE CONSOLA ===
+    public function setPrint(string $print): void {
+        Salida::$salidasConsola[] = $print;
+    }
 }

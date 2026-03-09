@@ -77,20 +77,101 @@ interface GolampiVisitor extends ParseTreeVisitor
 	public function visitAsignacion(Context\AsignacionContext $context);
 
 	/**
-	 * Visit a parse tree produced by {@see GolampiParser::expresion()}.
+	 * Visit a parse tree produced by the `ExprAgrupacion` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
 	 *
-	 * @param Context\ExpresionContext $context The parse tree.
+	 * @param Context\ExprAgrupacionContext $context The parse tree.
 	 *
 	 * @return mixed The visitor result.
 	 */
-	public function visitExpresion(Context\ExpresionContext $context);
+	public function visitExprAgrupacion(Context\ExprAgrupacionContext $context);
 
 	/**
-	 * Visit a parse tree produced by {@see GolampiParser::primitivos()}.
+	 * Visit a parse tree produced by the `ExprEntero` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
 	 *
-	 * @param Context\PrimitivosContext $context The parse tree.
+	 * @param Context\ExprEnteroContext $context The parse tree.
 	 *
 	 * @return mixed The visitor result.
 	 */
-	public function visitPrimitivos(Context\PrimitivosContext $context);
+	public function visitExprEntero(Context\ExprEnteroContext $context);
+
+	/**
+	 * Visit a parse tree produced by the `ExprBooleano` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprBooleanoContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprBooleano(Context\ExprBooleanoContext $context);
+
+	/**
+	 * Visit a parse tree produced by the `ExprDecimal` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprDecimalContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprDecimal(Context\ExprDecimalContext $context);
+
+	/**
+	 * Visit a parse tree produced by the `ExprSuma` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprSumaContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprSuma(Context\ExprSumaContext $context);
+
+	/**
+	 * Visit a parse tree produced by the `ExprCadena` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprCadenaContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprCadena(Context\ExprCadenaContext $context);
+
+	/**
+	 * Visit a parse tree produced by the `ExprIdentificador` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprIdentificadorContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprIdentificador(Context\ExprIdentificadorContext $context);
+
+	/**
+	 * Visit a parse tree produced by the `ExprUnaria` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprUnariaContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprUnaria(Context\ExprUnariaContext $context);
+
+	/**
+	 * Visit a parse tree produced by the `ExprMultiplicacion` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprMultiplicacionContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprMultiplicacion(Context\ExprMultiplicacionContext $context);
+
+	/**
+	 * Visit a parse tree produced by {@see GolampiParser::optipo()}.
+	 *
+	 * @param Context\OptipoContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitOptipo(Context\OptipoContext $context);
 }

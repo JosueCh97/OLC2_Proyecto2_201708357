@@ -3,7 +3,7 @@ namespace App\Utilities;
 
 enum TipoExpresion {
     case PRIMITIVO;
-    case ARMITEMETICO; // Lo mantengo exactamente como lo escribiste
+    case ARITMETICO; // Lo mantengo exactamente como lo escribiste
     case RELACIONAL;
     case LOGICO;
     case ACCESO_ID;
