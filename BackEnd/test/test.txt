@@ -1,9 +1,26 @@
-// 1. Declaramos y asignamos valores primitivos
-var x int32 = 10;
-var y int32 = 5;
+fmt.Print("--- 1. FOR CLASICO (con continue) ---")
+for var i int32 = 0; i < 4; i++ {
+    if i == 2 {
+        fmt.Print("Saltando el: ", i)
+        continue // Debe omitir imprimir el 2
+    }
+    fmt.Print("Iteracion: ", i)
+}
 
-// 2. Usamos AccesoID para leer 'x' e 'y', y Aritmetico para operarlos
-var z int32 = x + y * 2; 
+fmt.Print("--- 2. FOR ESTILO WHILE ---")
+var x int32 = 3
+for x > 0 {
+    fmt.Print("X vale: ", x)
+    x--
+}
 
-// 3. Verificamos asignaciones múltiples operando con variables
-var a, b int32 = z - 2, x % 3;
+fmt.Print("--- 3. FOR INFINITO (con break) ---")
+var count int32 = 1
+for {
+    fmt.Print("Infinito count: ", count)
+    if count == 2 {
+        fmt.Print("Rompiendo ciclo infinito!")
+        break // Si esto falla, tu programa se colgará (¡cuidado!)
+    }
+    count++
+}

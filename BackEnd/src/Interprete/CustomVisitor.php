@@ -143,7 +143,7 @@ class CustomVisitor extends GolampiBaseVisitor {
             'string'  => Tipo::CADENA,
             'bool'    => Tipo::BOOLEANO,
             'rune'    => Tipo::CARACTER,
-            default   => Tipo::NULL,
+            default   => Tipo::NIL,
         };
     }
 
@@ -370,6 +370,294 @@ class CustomVisitor extends GolampiBaseVisitor {
             $ctx->IDNAME()->getText()
         );
     }
+
+
+    // ==========================================
+    // EXPRESIONES COMPARACION
+    // ==========================================
+
+public function visitExprComparacion($ctx) {
+        $izq = $this->visit($ctx->expresion(0));
+        $der = $this->visit($ctx->expresion(1));
+        
+        // Ahora obtenemos el signo usando el hijo 1 (que es el operador)
+        $signo = $ctx->getChild(1)->getText(); 
+        
+        return new \App\Expressions\Relacional(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $izq,
+            $signo,
+            $der
+        );
+    }
+
+
+    // ==========================================
+    // EXPRESIONES LÓGICAS
+    // ==========================================
+
+
+    public function visitExprAnd($ctx) {
+        $izq = $this->visit($ctx->expresion(0));
+        $der = $this->visit($ctx->expresion(1));
+        return new \App\Expressions\Logico(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(), 
+            $izq, '&&', $der
+        );
+    }
+
+    public function visitExprOr($ctx) {
+        $izq = $this->visit($ctx->expresion(0));
+        $der = $this->visit($ctx->expresion(1));
+        return new \App\Expressions\Logico(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(), 
+            $izq, '||', $der
+        );
+    }
+
+    public function visitExprNot($ctx) {
+        $der = $this->visit($ctx->expresion());
+        return new \App\Expressions\Logico(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(), 
+            null, '!', $der // El hijo izquierdo es nulo porque es unario
+        );
+    }
+
+
+
+   // ==========================================
+    // OPERACIONES COMPUESTAS (+=, -=, ++, --)
+    // ==========================================
+
+
+    // Para x += 5;
+    public function visitAsig_compuesta($ctx) {
+        $id = $ctx->IDNAME()->getText();
+        $operador = $ctx->getChild(1)->getText(); // Obtiene '+=', '-=', etc.
+        $expresion = $this->visit($ctx->expresion());
+        
+        return new \App\Instructions\AsignacionCompuesta(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $id,
+            $operador,
+            $expresion
+        );
+    }
+
+    // Para x++; o x--;
+    public function visitInc_dec($ctx) {
+        $id = $ctx->IDNAME()->getText();
+        $operador = $ctx->getChild(1)->getText(); // Obtiene '++' o '--'
+        
+        return new \App\Instructions\AsignacionCompuesta(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $id,
+            $operador,
+            null // No hay expresión del lado derecho
+        );
+    }
+    
+    
+  // ==========================================
+    // !BLOQUE DE INTRUCCIONES 
+    // ==========================================
+
+
+    // --- VISITOR PARA EL BLOQUE ---
+    public function visitBloque($ctx) {
+        $instrucciones = [];
+        // Recorremos todas las instrucciones que haya dentro de las llaves { }
+        foreach ($ctx->instruccion() as $instCtx) {
+            $instrucciones[] = $this->visit($instCtx);
+        }
+        
+        return new \App\Instructions\Bloque(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $instrucciones
+        );
+    }
+
+    //!  SALIDA (PRINT)
+    // --- VISITOR PARA IMPRIMIR ---
+    public function visitImprimir($ctx) {
+        // Obtenemos el arreglo plano de expresiones visitando la lista
+        $expresiones = $this->visit($ctx->listaexp());
+        
+        return new \App\Instructions\Imprimir(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $expresiones
+        );
+    }
+
+    // --- VISITOR PARA LA LISTA DE EXPRESIONES (listaexp) ---
+    public function visitListaexp($ctx) {
+        $expresiones = [];
+        
+        // Si hay una lista anidada a la izquierda (recursividad), la visitamos primero
+        if ($ctx->listaexp() !== null) {
+            $expresiones = $this->visit($ctx->listaexp()); // Esto devuelve un arreglo
+        }
+        
+        // Agregamos la expresión actual de la derecha
+        $expresiones[] = $this->visit($ctx->expresion());
+        
+        return $expresiones; // Devolvemos el arreglo acumulado
+    }
+
+  // ==========================================
+    // !INSTRUCCIONES DE CONTROL DE FLUJO 
+    // ==========================================
+
+
+
+    // --- VISITOR PARA EL IF / ELSE IF / ELSE ---
+    public function visitSi_stmt($ctx) {
+        $condicion = $this->visit($ctx->expresion());
+        $bloqueIf = $this->visit($ctx->bloque(0)); // El primer bloque siempre es el del IF
+        
+        $bloqueElse = null;
+        
+        // Verificamos si existe un ELSE en la gramática (preguntamos si hay un token TKELSE)
+        if ($ctx->TKELSE() !== null) {
+            // Si el else va seguido de un IF (else if), ANTLR lo guarda en si_stmt()
+            if ($ctx->si_stmt() !== null) {
+                $bloqueElse = $this->visit($ctx->si_stmt());
+            } 
+            // Si el else va seguido de llaves normales, ANTLR lo guarda en el segundo bloque
+            else if ($ctx->bloque(1) !== null) {
+                $bloqueElse = $this->visit($ctx->bloque(1));
+            }
+        }
+        
+        return new \App\Instructions\Si(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $condicion,
+            $bloqueIf,
+            $bloqueElse
+        );
+    }
+
+
+      // !SWITCH / CASE SEGUN
+
+      // --- VISITOR PARA EL SWITCH ---
+    public function visitSwitch($ctx) {
+        $condicionPrincipal = $this->visit($ctx->expresion());
+        
+        $casos = [];
+        foreach ($ctx->case() as $caseCtx) {
+            $casos[] = $this->visit($caseCtx);
+        }
+        
+        $bloqueDefault = null;
+        if ($ctx->default() !== null) {
+            $bloqueDefault = $this->visit($ctx->default());
+        }
+        
+        return new \App\Instructions\Segun(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $condicionPrincipal,
+            $casos,
+            $bloqueDefault
+        );
+    }
+
+    // --- VISITOR PARA LOS CASES (case 1, 2:) ---
+    public function visitCase($ctx) {
+        // Obtenemos la lista de expresiones usando el visitListaexp que hicimos en la impresión
+        $condiciones = $this->visit($ctx->listaexp()); 
+        
+        $instrucciones = [];
+        foreach ($ctx->instruccion() as $instCtx) {
+            $instrucciones[] = $this->visit($instCtx);
+        }
+        
+        // Convertimos el arreglo de instrucciones en un Bloque
+        $bloque = new \App\Instructions\Bloque(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $instrucciones
+        );
+        
+        return new \App\Instructions\Caso($condiciones, $bloque);
+    }
+
+    // --- VISITOR PARA EL DEFAULT ---
+    public function visitDefault($ctx) {
+        $instrucciones = [];
+        foreach ($ctx->instruccion() as $instCtx) {
+            $instrucciones[] = $this->visit($instCtx);
+        }
+        
+        return new \App\Instructions\Bloque(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $instrucciones
+        );
+    }
+
+
+
+        // !FOR  / bREACK/  /CONTINUE 
+        // ? NOTA  el return aun no porque no tenemos funciones,  y ya me dio error 
+        // --- BREAK Y CONTINUE ---
+    public function visitBreak($ctx) {
+        return new \App\Instructions\Romper($ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine());
+    }
+
+    public function visitContinue($ctx) {
+        return new \App\Instructions\Continuar($ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine());
+    }
+
+    // Compatibilidad con nombres anteriores de reglas (si no regeneraste parser).
+    public function visitSwitch_stmt($ctx) { return $this->visitSwitch($ctx); }
+    public function visitCase_stmt($ctx) { return $this->visitCase($ctx); }
+    public function visitDefault_stmt($ctx) { return $this->visitDefault($ctx); }
+    public function visitBreak_stmt($ctx) { return $this->visitBreak($ctx); }
+    public function visitContinue_stmt($ctx) { return $this->visitContinue($ctx); }
+
+    // --- FOR INFINITO: for { ... } ---
+    public function visitForInfinito($ctx) {
+        $bloque = $this->visit($ctx->bloque());
+        return new \App\Instructions\Para(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            null, null, null, $bloque
+        );
+    }
+
+    // --- FOR MIENTRAS: for x < 5 { ... } ---
+    public function visitForMientras($ctx) {
+        $condicion = $this->visit($ctx->expresion());
+        $bloque = $this->visit($ctx->bloque());
+        return new \App\Instructions\Para(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            null, $condicion, null, $bloque
+        );
+    }
+
+    // --- FOR CLÁSICO: for var i int32 = 0; i < 5; i++ { ... } ---
+    public function visitForClasico($ctx) {
+        $init = $this->visit($ctx->init());
+        $condicion = $this->visit($ctx->expresion());
+        $post = $this->visit($ctx->post());
+        $bloque = $this->visit($ctx->bloque());
+        
+        return new \App\Instructions\Para(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            $init, $condicion, $post, $bloque
+        );
+    }
+
+
+
+
 
 
 } // Todo: Fin de la clase CustomVisitor

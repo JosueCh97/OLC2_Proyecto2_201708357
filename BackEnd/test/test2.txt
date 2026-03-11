@@ -1,9 +1,10 @@
-// 1. Declaramos y asignamos valores primitivos
 var x int32 = 10;
-var y int32 = 5;
+var y int32 = 20;
 
-// 2. Usamos AccesoID para leer 'x' e 'y', y Aritmetico para operarlos
-var z int32 = x + y * 2; 
+// Verificando que la comparación devuelve un booleano y respeta precedencia
+var esMayor bool = x + 15 > y;     // 25 > 20 -> true
+var esIgual bool = x == 10;        // true
+var esDiferente bool = "hola" != "adios"; // true
 
-// 3. Verificamos asignaciones múltiples operando con variables
-var a, b int32 = z - 2, x % 3;
+// Debería tirar error semántico:
+var err bool = "hola" == 10;

@@ -7,7 +7,7 @@ enum Tipo {
     case BOOLEANO;
     case CARACTER;
     case CADENA;
-    case NULL;
+    case NIL;
     case LISTA;
 }
 

@@ -11,7 +11,7 @@ class OperacionDominante {
      * 2: BOOLEANO (bool)
      * 3: CARACTER (rune)
      * 4: CADENA (string)
-     * 5: NULL / ERROR
+     * 5: NIL / ERROR
      */
 
     // Función auxiliar para obtener el índice de la matriz a partir del Enum
@@ -27,53 +27,53 @@ class OperacionDominante {
     }
 
     public static array $suma = [
-        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NULL
-        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NULL, Tipo::ENTERO,  Tipo::NULL, Tipo::NULL], // ENTERO
-        [Tipo::DECIMAL, Tipo::DECIMAL, Tipo::NULL, Tipo::DECIMAL, Tipo::NULL, Tipo::NULL], // DECIMAL
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL], // BOOLEANO
-        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NULL, Tipo::ENTERO,  Tipo::NULL, Tipo::NULL], // CARACTER
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::CADENA, Tipo::NULL],// CADENA
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL]  // NULL
+        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NIL
+        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NIL, Tipo::ENTERO,  Tipo::NIL, Tipo::NIL], // ENTERO
+        [Tipo::DECIMAL, Tipo::DECIMAL, Tipo::NIL, Tipo::DECIMAL, Tipo::NIL, Tipo::NIL], // DECIMAL
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL], // BOOLEANO
+        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NIL, Tipo::ENTERO,  Tipo::NIL, Tipo::NIL], // CARACTER
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::CADENA, Tipo::NIL],// CADENA
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL]  // NIL
     ];
 
     public static array $resta = [
-        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NULL
-        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NULL, Tipo::ENTERO,  Tipo::NULL, Tipo::NULL], // ENTERO
-        [Tipo::DECIMAL, Tipo::DECIMAL, Tipo::NULL, Tipo::DECIMAL, Tipo::NULL, Tipo::NULL], // DECIMAL
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL], // BOOLEANO
-        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NULL, Tipo::ENTERO,  Tipo::NULL, Tipo::NULL], // CARACTER
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL], // CADENA
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL]  // NULL
+        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NIL
+        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NIL, Tipo::ENTERO,  Tipo::NIL, Tipo::NIL], // ENTERO
+        [Tipo::DECIMAL, Tipo::DECIMAL, Tipo::NIL, Tipo::DECIMAL, Tipo::NIL, Tipo::NIL], // DECIMAL
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL], // BOOLEANO
+        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NIL, Tipo::ENTERO,  Tipo::NIL, Tipo::NIL], // CARACTER
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL], // CADENA
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL]  // NIL
     ];
 
     public static array $multiplicacion = [
-        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NULL
-        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NULL, Tipo::ENTERO,  Tipo::CADENA, Tipo::NULL], // ENTERO
-        [Tipo::DECIMAL, Tipo::DECIMAL, Tipo::NULL, Tipo::DECIMAL, Tipo::NULL,   Tipo::NULL], // DECIMAL
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL,   Tipo::NULL], // BOOLEANO
-        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NULL, Tipo::ENTERO,  Tipo::NULL,   Tipo::NULL], // CARACTER
-        [Tipo::CADENA,  Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::CADENA, Tipo::NULL], // CADENA
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL,   Tipo::NULL]  // NULL
+        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NIL
+        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NIL, Tipo::ENTERO,  Tipo::CADENA, Tipo::NIL], // ENTERO
+        [Tipo::DECIMAL, Tipo::DECIMAL, Tipo::NIL, Tipo::DECIMAL, Tipo::NIL,   Tipo::NIL], // DECIMAL
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL,   Tipo::NIL], // BOOLEANO
+        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NIL, Tipo::ENTERO,  Tipo::NIL,   Tipo::NIL], // CARACTER
+        [Tipo::CADENA,  Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::CADENA, Tipo::NIL], // CADENA
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL,   Tipo::NIL]  // NIL
     ];
 
     public static array $division = [
-        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NULL
-        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NULL, Tipo::ENTERO,  Tipo::NULL, Tipo::NULL], // ENTERO
-        [Tipo::DECIMAL, Tipo::DECIMAL, Tipo::NULL, Tipo::DECIMAL, Tipo::NULL, Tipo::NULL], // DECIMAL
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL], // BOOLEANO
-        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NULL, Tipo::ENTERO,  Tipo::NULL, Tipo::NULL], // CARACTER
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL], // CADENA
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL]  // NULL
+        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NIL
+        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NIL, Tipo::ENTERO,  Tipo::NIL, Tipo::NIL], // ENTERO
+        [Tipo::DECIMAL, Tipo::DECIMAL, Tipo::NIL, Tipo::DECIMAL, Tipo::NIL, Tipo::NIL], // DECIMAL
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL], // BOOLEANO
+        [Tipo::ENTERO,  Tipo::DECIMAL, Tipo::NIL, Tipo::ENTERO,  Tipo::NIL, Tipo::NIL], // CARACTER
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL], // CADENA
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL]  // NIL
     ];
 
     public static array $modulo = [
-        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NULL
-        [Tipo::ENTERO,  Tipo::NULL,    Tipo::NULL, Tipo::ENTERO,  Tipo::NULL, Tipo::NULL], // ENTERO
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL], // DECIMAL
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL], // BOOLEANO
-        [Tipo::ENTERO,  Tipo::NULL,    Tipo::NULL, Tipo::ENTERO,  Tipo::NULL, Tipo::NULL], // CARACTER
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL], // CADENA
-        [Tipo::NULL,    Tipo::NULL,    Tipo::NULL, Tipo::NULL,    Tipo::NULL, Tipo::NULL]  // NULL
+        // ENTERO,      DECIMAL,       BOOLEANO,   CARACTER,      CADENA,     NIL
+        [Tipo::ENTERO,  Tipo::NIL,    Tipo::NIL, Tipo::ENTERO,  Tipo::NIL, Tipo::NIL], // ENTERO
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL], // DECIMAL
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL], // BOOLEANO
+        [Tipo::ENTERO,  Tipo::NIL,    Tipo::NIL, Tipo::ENTERO,  Tipo::NIL, Tipo::NIL], // CARACTER
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL], // CADENA
+        [Tipo::NIL,    Tipo::NIL,    Tipo::NIL, Tipo::NIL,    Tipo::NIL, Tipo::NIL]  // NIL
     ];
 
     /**
@@ -89,7 +89,7 @@ class OperacionDominante {
             '*' => self::$multiplicacion[$indiceIzq][$indiceDer],
             '/' => self::$division[$indiceIzq][$indiceDer],
             '%' => self::$modulo[$indiceIzq][$indiceDer],
-            default => Tipo::NULL
+            default => Tipo::NIL
         };
     }
 }

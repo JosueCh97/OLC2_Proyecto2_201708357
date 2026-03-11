@@ -14,8 +14,16 @@ instrucciones:
 instruccion: 
         declaracion
         | asignacion
-        ; 
-
+        | asig_compuesta     
+        | inc_dec
+        | si_stmt 
+        | switch          
+        | imprimir
+        | for         
+        | break      
+        | continue    
+  ; 
+bloque: '{' instruccion* '}';
 listids:
         IDNAME
         | listids ',' IDNAME;
@@ -32,15 +40,51 @@ declaracion:
 
 asignacion: listids IGUAL listaexp;
 
+asig_compuesta: IDNAME ( MASIG| MENOSIG| PORIG | DIVIG) expresion ;
+inc_dec: IDNAME (INC | DEC) ;
+
+si_stmt: TKIF expresion bloque (TKELSE (bloque | si_stmt))? ;
+
+imprimir: TKPRINT '(' listaexp ')';
+
+// ---  SWITCH ---
+switch: TKSWITCH expresion '{' case* default? '}' ;
+
+case: TKCASE listaexp ':' instruccion* ;
+
+default: TKDEFAULT ':' instruccion* ;
+
+// Para el For clásico, definimos qué puede ir en la inicialización y en la actualización
+init: declaracion | asignacion | asig_compuesta | inc_dec;
+post: asignacion | asig_compuesta | inc_dec;
+
+// 3 FOR
+for:
+      TKFOR bloque                                          #ForInfinito
+    | TKFOR expresion bloque                                #ForMientras
+    | TKFOR init ';' expresion ';' post bloque              #ForClasico
+    ;
 
 
+// DETENER/CONUAR
+break: TKBREAK ;
+continue: TKCONTINUE ;    
 
 expresion:
          // Operaciones aritméticas - ordenadas por precedencia (menor a mayor)
          '-' expresion                             #ExprUnaria
+        | '!' expresion                               #ExprNot
+        
         | '(' expresion ')'                         #ExprAgrupacion
+        
         | expresion ('*' | '/' | '%') expresion     #ExprMultiplicacion
         |expresion ('+' | '-') expresion             #ExprSuma
+        //Operaciones de comparación (¡CAMBIA ESTA LÍNEA!)
+        | expresion (IGUAL_IGUAL | DIFERENTE | MENOR_IGUAL | MAYOR_IGUAL | MENOR | MAYOR) expresion  #ExprComparacion
+        //Lógicos (Tienen la menor precedencia)
+        | expresion TKAND expresion                   #ExprAnd
+        | expresion TKOR expresion                    #ExprOr
+        
         // Expresiones primarias
         | INT                                       #ExprEntero
         | FLOAT                                     #ExprDecimal
@@ -67,11 +111,30 @@ TKRUNE: 'rune';
 TKSTRING: 'string';
 
 
+
+// --- TOKENS RELACIONALES ---
+IGUAL_IGUAL: '==';
+DIFERENTE: '!=';
+MENOR_IGUAL: '<=';
+MAYOR_IGUAL: '>=';
+MENOR: '<';
+MAYOR: '>';
+
+// Tokens Logicos
+TKAND: '&&';
+TKOR: '||';
 // ? TK asignacion
 TKVAR: 'var';
 TKCONST: 'const';
 IGUAL: '=';
 NIL: 'nil';
+//asignacion
+DEC: '--';
+INC: '++';
+MASIG: '+=';
+MENOSIG: '-=';
+PORIG: '*=';
+DIVIG: '/=';
 //? Bloque de sentrencia principal */
 TKMAIN: 'main';
 

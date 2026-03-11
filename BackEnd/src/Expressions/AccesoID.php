@@ -32,6 +32,6 @@ class AccesoID extends Expresion {
         Salida::$salidasConsola[] = $msgError;
         
         // Retornamos NULL para que las operaciones matemáticas fallen limpiamente
-        return new TipoRetorno(null, Tipo::NULL);
+        return new TipoRetorno(null, Tipo::NIL);
     }
 }

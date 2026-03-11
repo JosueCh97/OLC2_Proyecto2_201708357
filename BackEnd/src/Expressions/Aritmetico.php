@@ -38,7 +38,7 @@ class Aritmetico extends Expresion {
         $valor2 = $this->exp2->ejecutar($entorno);
         $tipoRes = OperacionDominante::getTipo($valor1->tipo, $valor2->tipo, '+');
 
-        if ($tipoRes === Tipo::NULL) {
+        if ($tipoRes === Tipo::NIL) {
             return $this->error("No se pueden sumar los tipos {$valor1->tipo->name} y {$valor2->tipo->name}");
         }
 
@@ -58,7 +58,7 @@ class Aritmetico extends Expresion {
         $valor2 = $this->exp2->ejecutar($entorno);
         $tipoRes = OperacionDominante::getTipo($valor1->tipo, $valor2->tipo, '-');
 
-        if ($tipoRes === Tipo::NULL) {
+        if ($tipoRes === Tipo::NIL) {
             return $this->error("No se pueden restar los tipos {$valor1->tipo->name} y {$valor2->tipo->name}");
         }
 
@@ -72,7 +72,7 @@ class Aritmetico extends Expresion {
         $valor2 = $this->exp2->ejecutar($entorno);
         $tipoRes = OperacionDominante::getTipo($valor1->tipo, $valor2->tipo, '*');
 
-        if ($tipoRes === Tipo::NULL) {
+        if ($tipoRes === Tipo::NIL) {
             return $this->error("No se pueden multiplicar los tipos {$valor1->tipo->name} y {$valor2->tipo->name}");
         }
 
@@ -105,7 +105,7 @@ class Aritmetico extends Expresion {
 
         $tipoRes = OperacionDominante::getTipo($valor1->tipo, $valor2->tipo, '/');
 
-        if ($tipoRes === Tipo::NULL) {
+        if ($tipoRes === Tipo::NIL) {
             return $this->error("No se pueden dividir los tipos {$valor1->tipo->name} y {$valor2->tipo->name}");
         }
 
@@ -131,7 +131,7 @@ class Aritmetico extends Expresion {
 
         $tipoRes = OperacionDominante::getTipo($valor1->tipo, $valor2->tipo, '%');
 
-        if ($tipoRes === Tipo::NULL) {
+        if ($tipoRes === Tipo::NIL) {
             return $this->error("No se puede aplicar módulo a los tipos {$valor1->tipo->name} y {$valor2->tipo->name}");
         }
 
@@ -175,7 +175,7 @@ class Aritmetico extends Expresion {
         Salida::$errores[] = $msgError;
         Salida::$salidasConsola[] = $msgError;
         
-        return new TipoRetorno(null, Tipo::NULL);
+        return new TipoRetorno(null, Tipo::NIL);
     }
 
     // Método para registrar las operaciones aritméticas en consola

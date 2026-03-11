@@ -53,6 +53,17 @@ class GolampiBaseVisitor extends AbstractParseTreeVisitor implements GolampiVisi
 	 * The default implementation returns the result of calling
 	 * {@see self::visitChildren()} on `context`.
 	 */
+	public function visitBloque(Context\BloqueContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
 	public function visitListids(Context\ListidsContext $context)
 	{
 	    return $this->visitChildren($context);
@@ -97,6 +108,160 @@ class GolampiBaseVisitor extends AbstractParseTreeVisitor implements GolampiVisi
 	 * The default implementation returns the result of calling
 	 * {@see self::visitChildren()} on `context`.
 	 */
+	public function visitAsig_compuesta(Context\Asig_compuestaContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitInc_dec(Context\Inc_decContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitSi_stmt(Context\Si_stmtContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitImprimir(Context\ImprimirContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitSwitch(Context\SwitchContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitCase(Context\CaseContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitDefault(Context\DefaultContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitInit(Context\InitContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitPost(Context\PostContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitForInfinito(Context\ForInfinitoContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitForMientras(Context\ForMientrasContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitForClasico(Context\ForClasicoContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitBreak(Context\BreakContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitContinue(Context\ContinueContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
 	public function visitExprAgrupacion(Context\ExprAgrupacionContext $context)
 	{
 	    return $this->visitChildren($context);
@@ -120,17 +285,6 @@ class GolampiBaseVisitor extends AbstractParseTreeVisitor implements GolampiVisi
 	 * {@see self::visitChildren()} on `context`.
 	 */
 	public function visitExprBooleano(Context\ExprBooleanoContext $context)
-	{
-	    return $this->visitChildren($context);
-	}
-
-	/**
-	 * {@inheritdoc}
-	 *
-	 * The default implementation returns the result of calling
-	 * {@see self::visitChildren()} on `context`.
-	 */
-	public function visitExprDecimal(Context\ExprDecimalContext $context)
 	{
 	    return $this->visitChildren($context);
 	}
@@ -185,7 +339,62 @@ class GolampiBaseVisitor extends AbstractParseTreeVisitor implements GolampiVisi
 	 * The default implementation returns the result of calling
 	 * {@see self::visitChildren()} on `context`.
 	 */
+	public function visitExprNot(Context\ExprNotContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitExprAnd(Context\ExprAndContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitExprDecimal(Context\ExprDecimalContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitExprOr(Context\ExprOrContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
 	public function visitExprMultiplicacion(Context\ExprMultiplicacionContext $context)
+	{
+	    return $this->visitChildren($context);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 *
+	 * The default implementation returns the result of calling
+	 * {@see self::visitChildren()} on `context`.
+	 */
+	public function visitExprComparacion(Context\ExprComparacionContext $context)
 	{
 	    return $this->visitChildren($context);
 	}
