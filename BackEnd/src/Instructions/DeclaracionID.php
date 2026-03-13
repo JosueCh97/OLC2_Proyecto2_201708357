@@ -1,6 +1,6 @@
 <?php
 namespace App\Instructions;
-
+use App\Utilities\ValorArreglo;
 use App\Ast\Instruction;
 use App\Ast\Expresion;
 use App\Entorno\Entorno;
@@ -51,7 +51,8 @@ class DeclaracionID extends Instruction {
                 
                 Salida::$salidasConsola[] = "→ Asignando {$tipoDeclaracion}: '{$this->id}'";
                 Salida::$salidasConsola[] = "  • Tipo: {$tipoStr}";
-                Salida::$salidasConsola[] = "  • Valor: {$valorEvaluado->valor}";
+                $valorAImprimir = $this->formatearSalida($valorEvaluado->valor);
+                Salida::$salidasConsola[] = "  • Valor: {$valorAImprimir}";
                 Salida::$salidasConsola[] = "  • Es constante: " . ($this->isconstid ? "Sí" : "No");
                 
                 // Validación de tipos
@@ -119,4 +120,54 @@ class DeclaracionID extends Instruction {
 
         return null;
     }
+
+
+    /**
+     * Devuelve el valor por defecto de Go según el tipo de dato
+     */
+    private function getValorPorDefecto(Tipo $tipo) {
+        return match($tipo) {
+            Tipo::ENTERO => 0,
+            Tipo::DECIMAL => 0.0,
+            Tipo::BOOLEANO => false,
+            Tipo::CADENA => "",
+            Tipo::CARACTER => 0, // En Go, las runas son alias de int32 (por defecto 0)
+            default => null
+        };
+    }
+
+    /**
+     * Función recursiva que construye matrices multidimensionales vacías
+     * Ej: Si $dimensiones = [2, 3], creará una matriz de 2 filas y 3 columnas llena de valores por defecto
+     */
+    private function generarArregloPorDefecto(Tipo $tipoBase, array $dimensiones, int $nivelActual = 0): array {
+        $arreglo = [];
+        $tamañoDimensionActual = $dimensiones[$nivelActual];
+
+        for ($i = 0; $i < $tamañoDimensionActual; $i++) {
+            // Si no estamos en la última dimensión, hacemos recursividad (creamos otro arreglo adentro)
+            if ($nivelActual < count($dimensiones) - 1) {
+                $arreglo[] = $this->generarArregloPorDefecto($tipoBase, $dimensiones, $nivelActual + 1);
+            } else {
+                // Si es la última dimensión, lo llenamos con los valores por defecto
+                $arreglo[] = $this->getValorPorDefecto($tipoBase);
+            }
+        }
+
+        return $arreglo;
+    }
+
+
+    private function formatearSalida($valor) {
+        if ($valor instanceof ValorArreglo) {
+            $dims = implode("x", $valor->dimensiones);
+            return "[Arreglo {$dims} de tipo {$valor->tipoBase->name}]";
+        } elseif (is_bool($valor)) {
+            return $valor ? "true" : "false";
+        } elseif (is_null($valor)) {
+            return "nil";
+        }
+        return (string)$valor;
+    }
+
 }

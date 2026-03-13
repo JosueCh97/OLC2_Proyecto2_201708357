@@ -13,6 +13,7 @@ instrucciones:
 
 instruccion: 
         declaracion
+        | decl_corta
         | asignacion
         | asig_compuesta     
         | inc_dec
@@ -21,7 +22,10 @@ instruccion:
         | imprimir
         | for         
         | break      
-        | continue    
+        | continue  
+        | func_dcl           
+        | return_stmt        
+        | llamada_stmt
   ; 
 bloque: '{' instruccion* '}';
 listids:
@@ -32,16 +36,24 @@ listaexp:
         expresion
         | listaexp ',' expresion;
 
+// --- NUEVO SISTEMA DE TIPOS Y ASIGNABLES ---
+// Un tipo puede ser 'int32' o '[5]int32' o '[2][3]int32'
+tipo_var: PUNTERO? ('[' expresion ']')* optipo ;
+
+// Un asignable es una variable 'x' o una posición de arreglo 'nums[0][1]'
+asignable: IDNAME ('[' expresion ']')* ;
 
 declaracion:
-        TKVAR listids optipo 
-        | TKVAR listids optipo IGUAL listaexp
-        | TKCONST listids optipo IGUAL listaexp;   
+        TKVAR listids tipo_var 
+        | TKVAR listids tipo_var IGUAL listaexp
+        | TKCONST listids tipo_var IGUAL listaexp;  
 
-asignacion: listids IGUAL listaexp;
+decl_corta: IDNAME (',' IDNAME)* DPIGUAL listaexp ;
 
-asig_compuesta: IDNAME ( MASIG| MENOSIG| PORIG | DIVIG) expresion ;
-inc_dec: IDNAME (INC | DEC) ;
+asignacion: asignable (',' asignable)* IGUAL listaexp;
+
+asig_compuesta: asignable ( MASIG| MENOSIG| PORIG | DIVIG) expresion ;
+inc_dec: asignable (INC | DEC) ;
 
 si_stmt: TKIF expresion bloque (TKELSE (bloque | si_stmt))? ;
 
@@ -55,7 +67,7 @@ case: TKCASE listaexp ':' instruccion* ;
 default: TKDEFAULT ':' instruccion* ;
 
 // Para el For clásico, definimos qué puede ir en la inicialización y en la actualización
-init: declaracion | asignacion | asig_compuesta | inc_dec;
+init: declaracion | decl_corta | asignacion | asig_compuesta | inc_dec;
 post: asignacion | asig_compuesta | inc_dec;
 
 // 3 FOR
@@ -70,12 +82,28 @@ for:
 break: TKBREAK ;
 continue: TKCONTINUE ;    
 
+// --- FUNCIONES ---
+func_dcl: TKFUNC IDNAME '(' parametros? ')' tipo_retorno? bloque ;
+parametros: parametro (',' parametro)* ;
+parametro: IDNAME tipo_var ;
+tipo_retorno: tipo_var | '(' tipo_var (',' tipo_var)* ')' ;
+
+return_stmt: TKRETURN listaexp? ;
+llamada_stmt: IDNAME '(' listaexp? ')' ;
+
+
 expresion:
          // Operaciones aritméticas - ordenadas por precedencia (menor a mayor)
          '-' expresion                             #ExprUnaria
         | '!' expresion                               #ExprNot
+
+       
+
         
         | '(' expresion ')'                         #ExprAgrupacion
+        //arreglos
+        | expresion '[' expresion ']'              #ExprArregloAcceso     
+        | tipo_var '{' lista_valores? '}'          #ExprArregloLiteral   
         
         | expresion ('*' | '/' | '%') expresion     #ExprMultiplicacion
         |expresion ('+' | '-') expresion             #ExprSuma
@@ -84,7 +112,18 @@ expresion:
         //Lógicos (Tienen la menor precedencia)
         | expresion TKAND expresion                   #ExprAnd
         | expresion TKOR expresion                    #ExprOr
+        // Llamadas a funciones, Referencias y Desreferencias
+        | IDNAME '(' listaexp? ')'                 #ExprLlamada         // suma(3, 4)
+        | REFERENCIA asignable                     #ExprReferencia      // &nums2
+        | PUNTERO asignable                        #ExprDesreferencia   // *a
+
+        // Agrupación, Acceso a Arreglos y Literales de Arreglos
+        | '(' expresion ')'                        #ExprAgrupacion
+        | expresion '[' expresion ']'              #ExprArregloAcceso      // <--- NUEVO: nums[0]
+        | tipo_var '{' lista_valores? '}'          #ExprArregloLiteral     // <--- NUEVO: [3]int32{1, 2, 3}
+    
         
+
         // Expresiones primarias
         | INT                                       #ExprEntero
         | FLOAT                                     #ExprDecimal
@@ -93,7 +132,10 @@ expresion:
         | IDNAME                                    #ExprIdentificador
         ;
 
-
+        // --- REGLAS PARA VALORES DE ARREGLOS LITERALES ---
+lista_valores: lista_valor (',' lista_valor)* ;
+lista_valor: expresion | '{' lista_valores? '}' ; // Permite anidar {{1, 2}, {3, 4}}
+        
 optipo:
          TKINT 
         | TKFLOAT 
@@ -129,6 +171,7 @@ TKCONST: 'const';
 IGUAL: '=';
 NIL: 'nil';
 //asignacion
+DPIGUAL: ':=';
 DEC: '--';
 INC: '++';
 MASIG: '+=';
@@ -136,15 +179,14 @@ MENOSIG: '-=';
 PORIG: '*=';
 DIVIG: '/=';
 //? Bloque de sentrencia principal */
-TKMAIN: 'main';
 
 //?TK_FUNCIONES SISTEMA
 TKFUNC: 'func';
 TKPRINT: 'fmt.Print';
-TKLEN: 'len';
-TKNOW: 'now';
-TKSUBSTR: 'substr';
-TYPEOF: 'typeof';
+// TKLEN: 'len';
+// TKNOW: 'now';
+// TKSUBSTR: 'substr';
+// TYPEOF: 'typeof';
 
 
 //TK CONTROL DE FLUJO
@@ -158,7 +200,10 @@ TKDEFAULT: 'default';
 TKFOR: 'for';
 TKBREAK: 'break';
 TKCONTINUE: 'continue';
+
 TKRETURN: 'return';
+PUNTERO: '*';
+REFERENCIA: '&';
 
 
 

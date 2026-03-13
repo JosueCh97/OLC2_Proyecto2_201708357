@@ -17,4 +17,6 @@ enum TipoInstruccion {
     case DECLARAR_PROCEDIMIENTO;
     case CONTINUAR;
     case DETENER;
+    case RETORNAR;
+    case LLAMADA_INSTR;
 }

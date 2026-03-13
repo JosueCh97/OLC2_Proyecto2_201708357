@@ -3,6 +3,7 @@ namespace App\Interprete;
 
 use App\Language\GolampiBaseVisitor;
 use App\Instructions\DeclaracionID;
+use App\Instructions\IncDec;
 use App\Expressions\Primitivo;
 use App\Utilities\Tipo;
 use App\Utilities\Salida;
@@ -52,7 +53,12 @@ class CustomVisitor extends GolampiBaseVisitor {
         
         // DETECCIÓN DE ERROR: Si la declaración termina con '=' o contiene '=' pero sin valores válidos
         if (substr($declText, -1) === '=' || (strpos($declText, '=') !== false && $listaexpCtx === null)) {
-            Salida::$salidasConsola[] = "❌ Error: Declaración incompleta [Línea {$ctx->getStart()->getLine()}] - Se esperaba una expresión después de '='";
+            Salida::reportarError(
+                'Sintactico',
+                "Declaracion incompleta. Se esperaba una expresion despues de '='",
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
             return null; // Ignorar esta declaración
         }
 
@@ -102,13 +108,29 @@ class CustomVisitor extends GolampiBaseVisitor {
         if ($ctx->IGUAL() !== null && !empty($valores)) {
             // Si hay asignación (=) y hay valores, deben coincidir las cantidades
             if (count($ids) !== count($valores)) {
-                Salida::$salidasConsola[] = "❌ Error [Línea {$ctx->getStart()->getLine()}]: Se declararon " . count($ids) . " IDs pero se asignaron " . count($valores) . " valores";
+                Salida::reportarError(
+                    'Sintactico',
+                    'Se declararon ' . count($ids) . ' IDs pero se asignaron ' . count($valores) . ' valores',
+                    $ctx->getStart()->getLine(),
+                    $ctx->getStart()->getCharPositionInLine()
+                );
                 return null; // Ignorar esta declaración
             }
         }
 
-        // --- OBTENER EL TIPO (int32, float32, etc.) ---
-        $tipoDato = $this->visitOptipo($ctx->optipo());
+        // --- OBTENER EL TIPO BASE (int32, float32, etc.) ---
+        // Con la nueva gramatica, declaracion usa tipo_var y no optipo directo.
+        $tipoVarCtx = $ctx->tipo_var();
+        if ($tipoVarCtx === null || $tipoVarCtx->optipo() === null) {
+            Salida::reportarError(
+                'Sintactico',
+                'Tipo de declaracion invalido o incompleto',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
+        $tipoDato = $this->visitOptipo($tipoVarCtx->optipo());
         // --- RETORNAR EL NODO AST ---
         // En lugar de hacer echo, construimos nuestro objeto DeclaracionID
         return new DeclaracionID(
@@ -148,63 +170,9 @@ class CustomVisitor extends GolampiBaseVisitor {
     }
 
     public function visitExpresion($ctx) {
-        // Una expresión puede ser INT, FLOAT, STRING, BOOL, UNICODE o un optipo
-        
-        if ($ctx->INT() !== null) {
-            return new Primitivo(
-                $ctx->getStart()->getLine(),
-                $ctx->getStart()->getCharPositionInLine(),
-                $ctx->INT()->getText(),
-                Tipo::ENTERO
-            );
-        }
-        
-        if ($ctx->FLOAT() !== null) {
-            return new Primitivo(
-                $ctx->getStart()->getLine(),
-                $ctx->getStart()->getCharPositionInLine(),
-                $ctx->FLOAT()->getText(),
-                Tipo::DECIMAL
-            );
-        }
-        
-        if ($ctx->STRING() !== null) {
-            // Remover las comillas del string
-            $stringValue = $ctx->STRING()->getText();
-            $stringValue = substr($stringValue, 1, -1); // Quita las comillas
-            
-            return new Primitivo(
-                $ctx->getStart()->getLine(),
-                $ctx->getStart()->getCharPositionInLine(),
-                $stringValue,
-                Tipo::CADENA
-            );
-        }
-        
-        if ($ctx->BOOL() !== null) {
-            return new Primitivo(
-                $ctx->getStart()->getLine(),
-                $ctx->getStart()->getCharPositionInLine(),
-                $ctx->BOOL()->getText(),
-                Tipo::BOOLEANO
-            );
-        }
-        
-        if ($ctx->UNICODE() !== null) {
-            return new Primitivo(
-                $ctx->getStart()->getLine(),
-                $ctx->getStart()->getCharPositionInLine(),
-                $ctx->UNICODE()->getText(),
-                Tipo::CARACTER
-            );
-        }
-        
-        // Si no, intentamos obtener el optipo
-        if ($ctx->optipo() !== null) {
-            return $this->visitOptipo($ctx->optipo());
-        }
-        
-        return null;
+        // La regla expresion usa alternativas etiquetadas (#Expr...)
+        // y se resuelve en visitExpr*; este metodo queda como fallback.
+        return $this->visitChildren($ctx);
     }
 
     // Método helper para extraer expresiones de listaexp
@@ -229,61 +197,6 @@ class CustomVisitor extends GolampiBaseVisitor {
         return array_reverse($expresionesTemp);
     }
 
-    public function visitAsignacion($ctx) {
-        $listaIdsCtx = $ctx->listids();
-        $listaExpCtx = $ctx->listaexp();
-        
-        // Prevención de errores sintácticos
-        if ($listaIdsCtx === null || $listaExpCtx === null) {
-            return null; 
-        }
-
-        // --- 1. EXTRACCIÓN DE IDs (mismo método que en declaración) ---
-        $ids = [];
-        $listaIdActual = $listaIdsCtx;
-        while ($listaIdActual !== null) {
-            $idname = $listaIdActual->IDNAME();
-            if ($idname !== null) {
-                $ids[] = $idname->getText();
-            }
-            $listaIdActual = $listaIdActual->listids();
-        }
-
-        // --- 2. EXTRACCIÓN DE VALORES (mismo método que en declaración) ---
-        $valores = [];
-        $listaExpActual = $listaExpCtx;
-        $expresionesTemp = [];
-        
-        while ($listaExpActual !== null) {
-            $expr = $listaExpActual->expresion();
-            if ($expr !== null) {
-                $expresionesTemp[] = $expr;
-            }
-            $listaExpActual = $listaExpActual->listaexp();
-        }
-        
-        // Invertir para tener el orden correcto
-        $expresionesTemp = array_reverse($expresionesTemp);
-        
-        // Visitar cada expresión
-        foreach ($expresionesTemp as $expr) {
-            $valores[] = $this->visit($expr);
-        }
-
-        // VALIDACIÓN: Comparar tamaños
-        if (count($ids) !== count($valores)) {
-            Salida::$salidasConsola[] = "❌ Error [Línea {$ctx->getStart()->getLine()}]: Se intentaron asignar " . count($valores) . " valores a " . count($ids) . " variables";
-            return null;
-        }
-
-        // --- 3. RETORNAR EL NODO AST ---
-        return new \App\Instructions\Asignacion(
-            $ctx->getStart()->getLine(),
-            $ctx->getStart()->getCharPositionInLine(),
-            count($ids) === 1 ? $ids[0] : $ids,
-            count($valores) === 1 ? $valores[0] : $valores
-        );
-    }
 
 
     // ==========================================
@@ -427,39 +340,171 @@ public function visitExprComparacion($ctx) {
 
 
    // ==========================================
-    // OPERACIONES COMPUESTAS (+=, -=, ++, --)
+    // ASIGNACIONES (=, +=, -=, ++, --)
     // ==========================================
 
+    // Para x = 10;  x, y = 1, 2;  arr[0] = 99;
+    public function visitAsignacion($ctx) {
+        $asignablesRaw = $ctx->asignable();
+        $asignables = [];
 
-    // Para x += 5;
-    public function visitAsig_compuesta($ctx) {
-        $id = $ctx->IDNAME()->getText();
-        $operador = $ctx->getChild(1)->getText(); // Obtiene '+=', '-=', etc.
-        $expresion = $this->visit($ctx->expresion());
-        
-        return new \App\Instructions\AsignacionCompuesta(
+        if (is_array($asignablesRaw)) {
+            $asignables = $asignablesRaw;
+        } elseif ($asignablesRaw !== null) {
+            $asignables[] = $asignablesRaw;
+        }
+
+        if (empty($asignables)) {
+            Salida::reportarError(
+                'Sintactico',
+                'Asignacion invalida, no hay variables destino',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
+
+        $exprCtxs = $this->extractarExpresionesDeListaexp($ctx->listaexp());
+        $valores = [];
+        foreach ($exprCtxs as $exprCtx) {
+            $valores[] = $this->visit($exprCtx);
+        }
+
+        if (count($asignables) !== count($valores)) {
+            Salida::reportarError(
+                'Sintactico',
+                'La cantidad de destinos no coincide con la cantidad de valores',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
+
+        // Caso especial: asignación sobre arreglo, ej. nums[0] = 10
+        if (count($asignables) === 1) {
+            $asignable = $asignables[0];
+            $idToken = $asignable !== null ? $asignable->IDNAME() : null;
+            if ($idToken === null) {
+                Salida::reportarError(
+                    'Sintactico',
+                    'Destino de asignacion invalido',
+                    $ctx->getStart()->getLine(),
+                    $ctx->getStart()->getCharPositionInLine()
+                );
+                return null;
+            }
+
+            $indicesCtx = $asignable->expresion();
+            $indices = [];
+            if (is_array($indicesCtx)) {
+                foreach ($indicesCtx as $indiceCtx) {
+                    $indices[] = $this->visit($indiceCtx);
+                }
+            }
+
+            if (!empty($indices)) {
+                return new \App\Instructions\AsignacionArreglo(
+                    $ctx->getStart()->getLine(),
+                    $ctx->getStart()->getCharPositionInLine(),
+                    $idToken->getText(),
+                    $indices,
+                    $valores[0]
+                );
+            }
+
+            return new \App\Instructions\Asignacion(
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine(),
+                $idToken->getText(),
+                $valores[0]
+            );
+        }
+
+        // Asignación múltiple: x, y = a, b
+        $ids = [];
+        foreach ($asignables as $asignable) {
+            $idToken = $asignable !== null ? $asignable->IDNAME() : null;
+            if ($idToken === null) {
+                Salida::reportarError(
+                    'Sintactico',
+                    'Destino invalido en asignacion multiple',
+                    $ctx->getStart()->getLine(),
+                    $ctx->getStart()->getCharPositionInLine()
+                );
+                return null;
+            }
+
+            $indicesCtx = $asignable->expresion();
+            if (is_array($indicesCtx) && count($indicesCtx) > 0) {
+                Salida::reportarError(
+                    'Sintactico',
+                    'No se soporta mezcla de asignacion multiple con indices de arreglo',
+                    $ctx->getStart()->getLine(),
+                    $ctx->getStart()->getCharPositionInLine()
+                );
+                return null;
+            }
+
+            $ids[] = $idToken->getText();
+        }
+
+        return new \App\Instructions\Asignacion(
             $ctx->getStart()->getLine(),
             $ctx->getStart()->getCharPositionInLine(),
-            $id,
-            $operador,
-            $expresion
+            $ids,
+            $valores
         );
     }
 
-    // Para x++; o x--;
-    public function visitInc_dec($ctx) {
-        $id = $ctx->IDNAME()->getText();
-        $operador = $ctx->getChild(1)->getText(); // Obtiene '++' o '--'
-        
-        return new \App\Instructions\AsignacionCompuesta(
-            $ctx->getStart()->getLine(),
-            $ctx->getStart()->getCharPositionInLine(),
-            $id,
-            $operador,
-            null // No hay expresión del lado derecho
-        );
-    }
+
+
+
     
+
+ public function visitAsig_compuesta($ctx) {
+        $asignableCtx = $ctx->asignable();
+        $id = $asignableCtx->IDNAME()->getText();
+        $valor = $this->visit($ctx->expresion());
+        $operador = $ctx->getChild(1)->getText(); // +=, -=, *=, /=
+
+        // Validamos que no intenten hacer nums[0] += 5 por ahora
+        if (count($asignableCtx->expresion()) > 0) {
+            Salida::reportarError(
+                'Sintactico',
+                'Asignacion compuesta en arreglos no soportada aun',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
+
+        return new \App\Instructions\AsignacionCompuesta(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            $id, $valor, $operador
+        );
+    }
+
+ public function visitInc_dec($ctx) {
+        $asignableCtx = $ctx->asignable();
+        $id = $asignableCtx->IDNAME()->getText();
+        $operador = $ctx->getChild(1)->getText(); // ++ o --
+
+        // Validamos que no intenten hacer nums[0]++ por ahora
+        if (count($asignableCtx->expresion()) > 0) {
+            Salida::reportarError(
+                'Sintactico',
+                'Incremento/Decremento en arreglos no soportado aun',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
+
+        return new IncDec(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            $id, $operador
+        );
+    }
     
   // ==========================================
     // !BLOQUE DE INTRUCCIONES 
@@ -657,7 +702,252 @@ public function visitExprComparacion($ctx) {
 
 
 
+    /**
+    // arreglos
+     */
+
+    public function analizarTipoVar($ctxTipoVar): array {
+        // 1. Obtenemos el tipo base
+        $tipoBaseStr = $ctxTipoVar->optipo()->getText();
+        $tipoBase = match ($tipoBaseStr) {
+            'int32' => Tipo::ENTERO,
+            'float32' => Tipo::DECIMAL,
+            'bool' => Tipo::BOOLEANO,
+            'string' => Tipo::CADENA,
+            'rune' => Tipo::CARACTER,
+            default => Tipo::NIL
+        };
+
+        // 2. Extraemos las expresiones de las dimensiones sin evaluarlas aún
+        $dimensionesExpr = [];
+        foreach ($ctxTipoVar->expresion() as $expCtx) {
+            $dimensionesExpr[] = $this->visit($expCtx);
+        }
+
+        return [$tipoBase, $dimensionesExpr];
+    }
+
+public function visitExprArregloAcceso($ctx) {
+        // Visitamos el índice actual (el de la derecha, ej: 'j')
+        $indiceNuevo = $this->visit($ctx->expresion(1));
+        
+        // Visitamos la parte izquierda (ej: 'm[i]' o simplemente 'nums')
+        $nodoIzquierdo = $this->visit($ctx->expresion(0));
+
+        // Si la parte izquierda ya era un Acceso a Arreglo, 
+        // significa que estamos en una matriz. Solo le sumamos el nuevo índice.
+        if ($nodoIzquierdo instanceof \App\Expressions\AccesoArreglo) {
+            $nodoIzquierdo->agregarIndice($indiceNuevo);
+            return $nodoIzquierdo; 
+        }
+
+        // Si es la primera vez (ej: 'nums[0]'), creamos el acceso base extrayendo el ID real
+        $id = $ctx->expresion(0)->getText();
+        return new \App\Expressions\AccesoArreglo(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $id,
+            [$indiceNuevo]
+        );
+    }
+
+ 
 
 
+
+
+
+    // --- VISITOR PARA EL LITERAL [3]int32{1, 2, 3} ---
+    public function visitExprArregloLiteral($ctx) {
+        // Aprovechamos tu función perfectamente modificada para sacar el tipo y dimensiones
+        list($tipoBase, $dimensionesExpr) = $this->analizarTipoVar($ctx->tipo_var());
+
+        $valores = [];
+        if ($ctx->lista_valores() !== null) {
+            $valores = $this->visit($ctx->lista_valores());
+        }
+
+        return new \App\Expressions\ArregloLiteral(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $tipoBase,
+            $dimensionesExpr,
+            $valores
+        );
+    }
+
+    // --- VISITORS PARA EXTRAER LAS LISTAS DE EXPRESIONES ---
+    public function visitLista_valores($ctx) {
+        $valores = [];
+        foreach ($ctx->lista_valor() as $valorCtx) {
+            $valores[] = $this->visit($valorCtx);
+        }
+        return $valores; // Retorna un array de expresiones
+    }
+
+    public function visitLista_valor($ctx) {
+        // Si es un valor simple (ej: 5)
+        if ($ctx->expresion() !== null) {
+            return $this->visit($ctx->expresion());
+        }
+        // Si es un sub-arreglo anidado (ej: {1, 2})
+        if ($ctx->lista_valores() !== null) {
+            return $this->visit($ctx->lista_valores());
+        }
+        return [];
+    }
+
+
+    // --- VISITOR PARA DECLARACIÓN CORTA: x := 10;  a, b := 1, 2;// --- VISITOR PARA DECLARACIÓN CORTA ( x, y := 1, 2 ) ---
+    public function visitDecl_corta($ctx) {
+        // 1. Extraemos todos los IDs de la izquierda
+        $ids = [];
+        foreach ($ctx->IDNAME() as $idNode) {
+            $ids[] = $idNode->getText();
+        }
+
+        // 2. Extraemos y visitamos las expresiones de la derecha usando tu función helper
+        $exprCtxs = $this->extractarExpresionesDeListaexp($ctx->listaexp());
+        $valores = [];
+        foreach ($exprCtxs as $exprCtx) {
+            $valores[] = $this->visit($exprCtx);
+        }
+
+        return new \App\Instructions\DeclaracionCorta(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $ids,
+            $valores
+        );
+    }
+
+//---------------------------------------------------
+// Todo: funciones y parametrosn
+//---------------------------------------------------
+public function visitFunc_dcl($ctx) {
+        $nombre = $ctx->IDNAME()->getText();
+        
+        // 1. Extraer parámetros (si hay)
+        $parametros = [];
+        if ($ctx->parametros() !== null) {
+            $parametros = $this->visit($ctx->parametros());
+        }
+
+        // 2. Extraer tipos de retorno (si hay)
+        $tiposRetorno = [];
+        if ($ctx->tipo_retorno() !== null) {
+            $tiposRetorno = $this->visit($ctx->tipo_retorno());
+        }
+
+        // 3. Extraer el bloque de código
+        $bloque = $this->visit($ctx->bloque());
+
+        return new \App\Instructions\Funcion(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $nombre,
+            $parametros,
+            $tiposRetorno,
+            $bloque
+        );
+    }
+
+    //return
+    // Extrae la lista completa de parámetros
+    public function visitParametros($ctx) {
+        $params = [];
+        foreach ($ctx->parametro() as $paramCtx) {
+            $params[] = $this->visit($paramCtx);
+        }
+        return $params;
+    }
+
+    // Extrae un solo parámetro (ej: x *[5]int32)
+    public function visitParametro($ctx) {
+        $id = $ctx->IDNAME()->getText();
+        
+        // Verificamos si tiene el símbolo '*' de puntero
+        $isPuntero = $ctx->tipo_var()->PUNTERO() !== null;
+        
+        list($tipoBase, $dimensiones) = $this->analizarTipoVar($ctx->tipo_var());
+
+        return new \App\Expressions\Parametro($id, $tipoBase, $dimensiones, $isPuntero);
+    }
+
+    // Extrae los tipos de retorno (puede ser 1 o varios)
+    public function visitTipo_retorno($ctx) {
+        $tipos = [];
+        foreach ($ctx->tipo_var() as $tipoCtx) {
+            $isPuntero = $tipoCtx->PUNTERO() !== null;
+            list($tipoBase, $dimensiones) = $this->analizarTipoVar($tipoCtx);
+            $tipos[] = [
+                "tipoBase" => $tipoBase,
+                "dimensiones" => $dimensiones,
+                "isPuntero" => $isPuntero
+            ];
+        }
+        return $tipos; // Retorna un array de arreglos asociativos
+    }
+
+    // Extrae la instrucción Return
+    public function visitReturn_stmt($ctx) {
+        $valores = [];
+        if ($ctx->listaexp() !== null) {
+            $exprCtxs = $this->extractarExpresionesDeListaexp($ctx->listaexp());
+            foreach ($exprCtxs as $expCtx) {
+                $valores[] = $this->visit($expCtx);
+            }
+        }
+
+        return new \App\Instructions\Retorno(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $valores
+        );
+    }
+
+
+
+    //?llamadas
+    // Para cuando la llamada está sola en una línea (Ej: imprimirArbol() )
+    public function visitLlamada_stmt($ctx) {
+        $nombre = $ctx->IDNAME()->getText();
+        $args = [];
+        
+        if ($ctx->listaexp() !== null) {
+            $exprCtxs = $this->extractarExpresionesDeListaexp($ctx->listaexp());
+            foreach ($exprCtxs as $exprCtx) {
+                $args[] = $this->visit($exprCtx);
+            }
+        }
+        
+        $llamadaExpr = new \App\Expressions\Llamada(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            $nombre, $args
+        );
+        
+        return new \App\Instructions\LlamadaInstr(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            $llamadaExpr
+        );
+    }
+
+    // Para cuando la llamada es parte de una ecuación (Ej: x = suma(1, 2) )
+    public function visitExprLlamada($ctx) {
+        $nombre = $ctx->IDNAME()->getText();
+        $args = [];
+        
+        if ($ctx->listaexp() !== null) {
+            $exprCtxs = $this->extractarExpresionesDeListaexp($ctx->listaexp());
+            foreach ($exprCtxs as $exprCtx) {
+                $args[] = $this->visit($exprCtx);
+            }
+        }
+        
+        return new \App\Expressions\Llamada(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            $nombre, $args
+        );
+    }
 
 } // Todo: Fin de la clase CustomVisitor

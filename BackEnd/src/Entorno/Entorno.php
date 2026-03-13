@@ -131,8 +131,8 @@ class Entorno {
             $entorno->funciones[$id] = $funcion;
             
             // Insertamos en la tabla de simbolos
-            //Tabla::$tablaSimbolos[] = new SimboloTabla($funcion->linea, $funcion->columna, false, false, null, $funcion->tipo, $id, $entorno->nombre);
-            Tabla::push(new SimboloTabla($funcion->linea, $funcion->columna, false, false, null, $funcion->tipo, $id, $entorno->nombre));
+            //Tabla::$tablaSimbolos[] = new SimboloTabla($funcion->linea, $funcion->columna, false, false, null, Tipo::NIL, $id, $entorno->nombre);
+            Tabla::push(new SimboloTabla($funcion->linea, $funcion->columna, false, false, null, Tipo::NIL, $id, $entorno->nombre));
        
             }
         // Error semántico - Funcion ya existe

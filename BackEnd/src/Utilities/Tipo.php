@@ -9,6 +9,7 @@ enum Tipo {
     case CADENA;
     case NIL;
     case LISTA;
+    case ARREGLO;
 }
 
 // // Equivalente a: export type TipoRetorno = {valor: any, tipo: Tipo};

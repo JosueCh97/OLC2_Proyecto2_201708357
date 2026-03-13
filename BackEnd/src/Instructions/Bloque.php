@@ -20,10 +20,16 @@ class Bloque extends Instruction {
         $nuevoEntorno = new Entorno($entorno, "Bloque Local");
 
         foreach ($this->instrucciones as $instruccion) {
+
+            
+
             if ($instruccion === null) {
                 Salida::$salidasConsola[] = "⚠️ Advertencia [Línea {$this->linea}]: Se omitió una instrucción nula en bloque.";
                 continue;
             }
+
+
+
 
             try {
                 $resultado = $instruccion->ejecutar($nuevoEntorno);
@@ -33,6 +39,16 @@ class Bloque extends Instruction {
                 if ($resultado !== null) {
                     return $resultado;
                 }
+
+                if (is_array($resultado)) {
+                if (isset($resultado["control"])) {
+                    return $resultado; // Detenemos el bloque y lo pasamos hacia arriba
+                }
+            }
+
+
+
+
             } catch (\Exception $e) {
                 // Manejo de errores de ejecución (puedes conectarlo a tu clase Salida)
             }

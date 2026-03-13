@@ -6,6 +6,46 @@ namespace App\Utilities;
 class Salida {
     public static array $salidasConsola = [];
     public static array $errores = [];
+    public static array $erroresDetallados = [];
+
+    public static function reportarError(
+        string $tipo,
+        string $descripcion,
+        ?int $linea = null,
+        ?int $columna = null,
+        bool $agregarConsola = true
+    ): void {
+        $entrada = [
+            'tipo' => $tipo,
+            'descripcion' => $descripcion,
+            'linea' => $linea,
+            'columna' => $columna,
+        ];
+
+        self::$erroresDetallados[] = $entrada;
+
+        $texto = self::formatearError($entrada);
+        self::$errores[] = $texto;
+        if ($agregarConsola) {
+            self::$salidasConsola[] = $texto;
+        }
+    }
+
+    private static function formatearError(array $err): string {
+        $tipo = $err['tipo'] ?? 'General';
+        $descripcion = $err['descripcion'] ?? 'Error';
+        $linea = $err['linea'] ?? null;
+        $columna = $err['columna'] ?? null;
+
+        $ubicacion = '';
+        if ($linea !== null && $columna !== null) {
+            $ubicacion = " [Linea {$linea}, Columna {$columna}]";
+        } elseif ($linea !== null) {
+            $ubicacion = " [Linea {$linea}]";
+        }
+
+        return "❌ Error {$tipo}{$ubicacion}: {$descripcion}";
+    }
 
     public static function getSalida(): string {
         $out = '';
@@ -43,8 +83,13 @@ class Salida {
         return self::$errores;
     }
 
+    public static function getErroresDetallados(): array {
+        return self::$erroresDetallados;
+    }
+
     public static function limpiarSalidas(): void {
         self::$salidasConsola = [];
         self::$errores = [];
+        self::$erroresDetallados = [];
     }
 }

@@ -1,26 +1,34 @@
-fmt.Print("--- 1. FOR CLASICO (con continue) ---")
-for var i int32 = 0; i < 4; i++ {
-    if i == 2 {
-        fmt.Print("Saltando el: ", i)
-        continue // Debe omitir imprimir el 2
-    }
-    fmt.Print("Iteracion: ", i)
+// Declaraciones globales
+var mensaje string = "Probando JSON"
+const pi float32 = 3.14159
+
+func multiplicacion(a int32, b int32) int32 {
+    var resultado int32 = a * b
+    return resultado
 }
 
-fmt.Print("--- 2. FOR ESTILO WHILE ---")
-var x int32 = 3
-for x > 0 {
-    fmt.Print("X vale: ", x)
-    x--
-}
+func main() {
+    // 1. Ejecución normal (Esto irá a la Consola y a la Tabla de Símbolos)
+    var base int32 = 10
+    var calculo int32 = multiplicacion(base, 5)
+    
+    fmt.Print("El cálculo es: ", calculo)
+    
+    // 2. Funciones Embebidas
+    var texto string = "Golampi"
+    var longitud int32 = len(texto)
+    var fecha string = now()
+    
+    fmt.Print("Longitud de la palabra: ", longitud)
+    fmt.Print("Fecha de ejecución: ", fecha)
 
-fmt.Print("--- 3. FOR INFINITO (con break) ---")
-var count int32 = 1
-for {
-    fmt.Print("Infinito count: ", count)
-    if count == 2 {
-        fmt.Print("Rompiendo ciclo infinito!")
-        break // Si esto falla, tu programa se colgará (¡cuidado!)
-    }
-    count++
+    // 3. ERRORES FORZADOS (Esto llenará el arreglo de Errores)
+    // Error 1: Variable ya declarada
+    var base int32 = 20 
+    
+    // Error 2: Asignar un tipo incorrecto
+    var numero int32 = "esto es una cadena" 
+    
+    // Error 3: Llamar a una función que no existe
+    funcionFantasma()
 }
