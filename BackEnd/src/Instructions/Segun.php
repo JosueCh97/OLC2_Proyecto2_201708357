@@ -7,10 +7,10 @@ use App\Entorno\Entorno;
 use App\Utilities\TipoInstruccion;
 
 class Segun extends Instruction {
-    private Expresion $condicionPrincipal;
+    public Expresion $condicionPrincipal;
     /** @var Caso[] */
-    private array $casos;
-    private ?Bloque $bloqueDefault;
+    public array $casos;
+    public ?Bloque $bloqueDefault;
 
     public function __construct(int $linea, int $columna, Expresion $condicionPrincipal, array $casos, ?Bloque $bloqueDefault = null) {
         // Agrega SEGUN o SWITCH a tu Enum TipoInstruccion

@@ -10,9 +10,9 @@ use App\Utilities\Salida;
 use App\Utilities\ValorArreglo;
 
 class ArregloLiteral extends Expresion {
-    private Tipo $tipoBase;
-    private array $dimensionesExpr;
-    private array $valoresExpr; // Puede ser un arreglo anidado de expresiones
+    public Tipo $tipoBase;
+    public array $dimensionesExpr;
+    public array $valoresExpr; // Puede ser un arreglo anidado de expresiones
 
     public function __construct(int $linea, int $columna, Tipo $tipoBase, array $dimensionesExpr, array $valoresExpr) {
         parent::__construct($linea, $columna, TipoExpresion::ARREGLO_LITERAL ?? 'ARREGLO_LITERAL');

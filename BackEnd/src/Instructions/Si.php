@@ -9,9 +9,9 @@ use App\Utilities\Tipo;
 use App\Utilities\Salida;
 
 class Si extends Instruction {
-    private Expresion $condicion;
-    private Instruction $bloqueIf; // Siempre será un objeto de tipo Bloque
-    private ?Instruction $bloqueElse; // Puede ser un Bloque (else), un Si (else if), o null
+    public Expresion $condicion;
+    public Instruction $bloqueIf; // Siempre será un objeto de tipo Bloque
+    public ?Instruction $bloqueElse; // Puede ser un Bloque (else), un Si (else if), o null
 
     public function __construct(int $linea, int $columna, Expresion $condicion, Instruction $bloqueIf, ?Instruction $bloqueElse = null) {
         parent::__construct($linea, $columna, TipoInstruccion::SI);

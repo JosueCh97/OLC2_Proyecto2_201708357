@@ -32,9 +32,18 @@ class Logico extends Expresion {
 
     private function and(Entorno $entorno): TipoRetorno {
         $valor1 = $this->exp1->ejecutar($entorno);
-        $valor2 = $this->exp2->ejecutar($entorno);
+        if ($valor1->tipo !== Tipo::BOOLEANO) {
+            return $this->error("Tipos incompatibles para &&. Se esperaban valores BOOLEANOS.");
+        }
 
-        if ($valor1->tipo !== Tipo::BOOLEANO || $valor2->tipo !== Tipo::BOOLEANO) {
+        // Cortocircuito real: si el lado izquierdo es false, no evaluamos el derecho.
+        if ($valor1->valor === false) {
+            $this->imprimirConsola(false, '&&', false, false);
+            return new TipoRetorno(false, Tipo::BOOLEANO);
+        }
+
+        $valor2 = $this->exp2->ejecutar($entorno);
+        if ($valor2->tipo !== Tipo::BOOLEANO) {
             return $this->error("Tipos incompatibles para &&. Se esperaban valores BOOLEANOS.");
         }
 
@@ -46,9 +55,18 @@ class Logico extends Expresion {
 
     private function or(Entorno $entorno): TipoRetorno {
         $valor1 = $this->exp1->ejecutar($entorno);
-        $valor2 = $this->exp2->ejecutar($entorno);
+        if ($valor1->tipo !== Tipo::BOOLEANO) {
+            return $this->error("Tipos incompatibles para ||. Se esperaban valores BOOLEANOS.");
+        }
 
-        if ($valor1->tipo !== Tipo::BOOLEANO || $valor2->tipo !== Tipo::BOOLEANO) {
+        // Cortocircuito real: si el lado izquierdo es true, no evaluamos el derecho.
+        if ($valor1->valor === true) {
+            $this->imprimirConsola(true, '||', true, true);
+            return new TipoRetorno(true, Tipo::BOOLEANO);
+        }
+
+        $valor2 = $this->exp2->ejecutar($entorno);
+        if ($valor2->tipo !== Tipo::BOOLEANO) {
             return $this->error("Tipos incompatibles para ||. Se esperaban valores BOOLEANOS.");
         }
 
@@ -69,7 +87,7 @@ class Logico extends Expresion {
         
         $strVal = $valor->valor ? 'true' : 'false';
         $strRes = $resultado ? 'true' : 'false';
-        Salida::$salidasConsola[] = "🧠 Lógica [Línea {$this->linea}]: !{$strVal} = {$strRes}";
+      //  Salida::$salidasConsola[] = "🧠 Lógica [Línea {$this->linea}]: !{$strVal} = {$strRes}";
         
         return new TipoRetorno($resultado, Tipo::BOOLEANO);
     }
@@ -78,7 +96,7 @@ class Logico extends Expresion {
         $str1 = $val1 ? 'true' : 'false';
         $str2 = $val2 ? 'true' : 'false';
         $strRes = $res ? 'true' : 'false';
-        Salida::$salidasConsola[] = "🧠 Lógica [Línea {$this->linea}]: {$str1} {$op} {$str2} = {$strRes}";
+       // Salida::$salidasConsola[] = "🧠 Lógica [Línea {$this->linea}]: {$str1} {$op} {$str2} = {$strRes}";
     }
 
     private function error(string $mensaje): TipoRetorno {

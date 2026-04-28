@@ -1,0 +1,135 @@
+// ========================================
+// testIA.txt - PRUEBAS CONTROLADAS DE ERRORES
+// Archivo diseñado para validar la detección
+// de errores léxicos, sintácticos y semánticos
+// ========================================
+
+func main() {
+    fmt.Println("=== INICIO PRUEBAS CONTROLADAS ===")
+
+    // ========================================
+    // SECCIÓN 1: CASOS QUE FUNCIONAN
+    // ========================================
+    fmt.Println("\n--- Sección 1: Casos Válidos ---")
+    
+    var x int32 = 10
+    var y int32 = 20
+    fmt.Println("x =", x, "y =", y)
+    
+    if x < y {
+        fmt.Println("x es menor que y: OK")
+    }
+    
+    var suma int32 = x + y
+    fmt.Println("Suma:", suma)
+    
+    // Cortocircuito correcto
+    if false && sideEffect("NO_DEBERIA_IMPRIMIR_1") {
+        fmt.Println("NO_DEBERIA_LLEGAR_1")
+    }
+    
+    if true || sideEffect("NO_DEBERIA_IMPRIMIR_2") {
+        fmt.Println("Cortocircuito OR: OK")
+    }
+
+    // ========================================
+    // SECCIÓN 2: ERRORES SEMÁNTICOS BÁSICOS
+    // ========================================
+    fmt.Println("\n--- Sección 2: Errores Semánticos ---")
+    
+    // Error 2.1: Variable no declarada
+    fmt.Println("Intentando usar variable no declarada:")
+    variableNoExiste = 5
+    
+    // Error 2.2: Variable ya declarada (redeclaración)
+    fmt.Println("Intentando redeclarar variable:")
+    var z int32 = 30
+    var z int32 = 40
+    
+    // Error 2.3: Tipo incompatible en asignación
+    fmt.Println("Intentando asignar tipo incompatible:")
+    var numero int32 = "esto es un string"
+    
+    // Error 2.4: Asignar valor a constante
+    fmt.Println("Intentando modificar constante:")
+    const CONSTANTE int32 = 100
+    CONSTANTE = 200
+    
+    // Error 2.5: Operación con tipos incompatibles
+    fmt.Println("Operaciones tipo incompatible:")
+    var resultado int32 = 42 + "cadena"
+    var resultado2 int32 = 10 / "texto"
+    
+    // Error 2.6: Comparación tipo incompatible
+    fmt.Println("Comparación tipo incompatible:")
+    if 5 == "cinco" {
+        fmt.Println("Esto no debería ejecutarse")
+    }
+
+    // ========================================
+    // SECCIÓN 3: ARREGLOS CON ERRORES
+    // ========================================
+    fmt.Println("\n--- Sección 3: Errores con Arreglos ---")
+    
+    // Error 3.1: Acceso a índice fuera de rango
+    var arr [3]int32 = [3]int32{1, 2, 3}
+    fmt.Println("Array:", arr[0], arr[1], arr[2])
+    fmt.Println("Acceso fuera de rango:")
+    fmt.Println(arr[10])
+    
+    // Error 3.2: No es un arreglo
+    var noEsArreglo int32 = 99
+    fmt.Println("Intentando indexar variable no-arreglo:")
+    fmt.Println(noEsArreglo[0])
+
+    // ========================================
+    // SECCIÓN 4: FUNCIONES CON ERRORES
+    // ========================================
+    fmt.Println("\n--- Sección 4: Errores con Funciones ---")
+    
+    // Error 4.1: Función no existe
+    fmt.Println("Llamando función que no existe:")
+    funcionFantasma()
+    
+    // Error 4.2: Número incorrecto de parámetros
+    funcionConDosParametros(5)
+    
+    // ========================================
+    // SECCIÓN 5: CONTROL DE FLUJO CON ERRORES
+    // ========================================
+    fmt.Println("\n--- Sección 5: Errores de Flujo ---")
+    
+    // Error 5.1: Break fuera de ciclo
+    fmt.Println("Break fuera de ciclo:")
+    break
+    
+    // Error 5.2: Continue fuera de ciclo
+    fmt.Println("Continue fuera de ciclo:")
+    continue
+
+    // ========================================
+    // SECCIÓN 6: DECLARACIONES CORTAS CON ERRORES
+    // ========================================
+    fmt.Println("\n--- Sección 6: Declaración Corta ---")
+    
+    // Error 6.1: := sin variable nueva
+    p := 50
+    p := 60
+    
+    // Error 6.2: Variable indefinida en :=
+    q, r := 70, 80
+    q, r := 90, 100
+
+    fmt.Println("=== FIN PRUEBAS CONTROLADAS ===")
+}
+
+// Función auxiliar para cortocircuito
+func sideEffect(tag string) bool {
+    fmt.Println("SIDE_EFFECT:", tag)
+    return true
+}
+
+// Función con parámetros
+func funcionConDosParametros(a int32, b int32) int32 {
+    return a + b
+}

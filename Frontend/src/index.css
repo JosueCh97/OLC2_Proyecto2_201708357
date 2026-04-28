@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #090d14;
+  --panel: rgba(13, 19, 29, 0.9);
+  --card: #111826;
+  --line: #243044;
+  --ink: #eef4fa;
+  --muted: #a0aaba;
+  --brand: #2a78b7;
+  --brand-2: #c08431;
+
+  --font-ui:
+    "Space Grotesk", "Sora", "Avenir Next", "Century Gothic", "Trebuchet MS",
+    sans-serif;
+  --font-title:
+    "Fraunces", "Baskerville", "Book Antiqua", "Palatino Linotype", serif;
+  --font-mono:
+    "IBM Plex Mono", "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+
+  font-family: var(--font-ui);
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  background:
+    radial-gradient(circle at top, rgba(42, 120, 183, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(8, 12, 19, 0.72), rgba(9, 13, 20, 0.98)),
+    var(--bg);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-title);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+a {
+  color: #8ec7ff;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand) 24%, black);
+  color: white;
+}

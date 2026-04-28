@@ -14,6 +14,9 @@ enum TipoExpresion {
     case ACCESO_ARREGLO ;
     case ARREGLO_LITERAL;
     case LLAMADA;
+    case CASTEO;
+    case REFERENCIA;
+    case DESREFERENCIA;
     
     case NULL;
 }

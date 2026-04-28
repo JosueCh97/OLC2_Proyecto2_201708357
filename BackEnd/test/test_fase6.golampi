@@ -1,0 +1,29 @@
+package main
+import "fmt"
+
+func main() {
+    var arr [5]int32
+    arr[0] = 10
+    arr[1] = 20
+    arr[2] = 30
+
+    fmt.Println(arr[0])
+    fmt.Println(arr[1])
+    fmt.Println(arr[2])
+    fmt.Println(len(arr))
+
+    b := [3]int32{100, 200, 300}
+    fmt.Println(b[0])
+    fmt.Println(b[2])
+
+    var mat [2][3]int32
+    mat[0][0] = 1
+    mat[0][1] = 2
+    mat[1][0] = 3
+    mat[1][2] = 4
+
+    fmt.Println(mat[0][0])
+    fmt.Println(mat[0][1])
+    fmt.Println(mat[1][0])
+    fmt.Println(mat[1][2])
+}

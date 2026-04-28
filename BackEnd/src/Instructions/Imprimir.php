@@ -7,14 +7,19 @@ use App\Entorno\Entorno;
 use App\Utilities\TipoInstruccion;
 use App\Utilities\Salida;
 use App\Utilities\Tipo;
+use App\Utilities\ValorArreglo;
 
 class Imprimir extends Instruction {
     /** @var Expresion[] */
-    private array $expresiones;
+    public array $expresiones;
 
-    public function __construct(int $linea, int $columna, array $expresiones) {
+    /** true = fmt.Println (agrega \n), false = fmt.Print (sin \n) */
+    public bool $esNewLine;
+
+    public function __construct(int $linea, int $columna, array $expresiones, bool $esNewLine = true) {
         parent::__construct($linea, $columna, TipoInstruccion::IMPRIMIR);
         $this->expresiones = $expresiones;
+        $this->esNewLine   = $esNewLine;
     }
 
     public function ejecutar(Entorno $entorno): mixed {
@@ -34,7 +39,7 @@ class Imprimir extends Instruction {
             if ($resultado->tipo === Tipo::BOOLEANO) {
                 $valoresAImprimir[] = $resultado->valor ? "true" : "false";
             } else {
-                $valoresAImprimir[] = (string)$resultado->valor;
+                $valoresAImprimir[] = $this->formatearValor($resultado->valor);
             }
         }
 
@@ -42,8 +47,62 @@ class Imprimir extends Instruction {
         $salidaFinal = implode(" ", $valoresAImprimir);
 
         // Lo mandamos a tu clase estática de Salida
-        Salida::$salidasConsola[] = "🖨️ " . $salidaFinal;
+        Salida::$salidasConsola[] = "\t " . $salidaFinal;
 
         return null;
+    }
+
+    private function formatearValor(mixed $valor): string {
+        if ($valor instanceof ValorArreglo) {
+            return $this->formatearArreglo($valor->valores);
+        }
+
+        if (is_bool($valor)) {
+            return $valor ? 'true' : 'false';
+        }
+
+        if ($valor === null) {
+            return 'nil';
+        }
+
+        if (is_array($valor)) {
+            return $this->formatearArreglo($valor);
+        }
+
+        if (is_object($valor)) {
+            return '[objeto]';
+        }
+
+        return (string) $valor;
+    }
+
+    private function formatearArreglo(array $arreglo): string {
+        $partes = [];
+
+        foreach ($arreglo as $item) {
+            if ($item instanceof ValorArreglo) {
+                $partes[] = $this->formatearArreglo($item->valores);
+                continue;
+            }
+
+            if (is_array($item)) {
+                $partes[] = $this->formatearArreglo($item);
+                continue;
+            }
+
+            if (is_bool($item)) {
+                $partes[] = $item ? 'true' : 'false';
+                continue;
+            }
+
+            if ($item === null) {
+                $partes[] = 'nil';
+                continue;
+            }
+
+            $partes[] = (string) $item;
+        }
+
+        return '[' . implode(', ', $partes) . ']';
     }
 }

@@ -8,7 +8,7 @@ use App\Utilities\TipoInstruccion;
 
 class Retorno extends Instruction {
     /** @var Expresion[] */
-    private array $expresiones;
+    public array $expresiones;
 
     public function __construct(int $linea, int $columna, array $expresiones) {
         parent::__construct($linea, $columna, TipoInstruccion::RETORNAR ?? 'RETORNO');

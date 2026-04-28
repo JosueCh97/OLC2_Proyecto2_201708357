@@ -26,6 +26,7 @@ instruccion:
         | func_dcl           
         | return_stmt        
         | llamada_stmt
+        | bloque
   ; 
 bloque: '{' instruccion* '}';
 listids:
@@ -40,8 +41,8 @@ listaexp:
 // Un tipo puede ser 'int32' o '[5]int32' o '[2][3]int32'
 tipo_var: PUNTERO? ('[' expresion ']')* optipo ;
 
-// Un asignable es una variable 'x' o una posición de arreglo 'nums[0][1]'
-asignable: IDNAME ('[' expresion ']')* ;
+// Un asignable puede ser una variable, una posicion de arreglo o un puntero dereferenciado
+asignable: PUNTERO? IDNAME ('[' expresion ']')* ;
 
 declaracion:
         TKVAR listids tipo_var 
@@ -52,12 +53,12 @@ decl_corta: IDNAME (',' IDNAME)* DPIGUAL listaexp ;
 
 asignacion: asignable (',' asignable)* IGUAL listaexp;
 
-asig_compuesta: asignable ( MASIG| MENOSIG| PORIG | DIVIG) expresion ;
+asig_compuesta: asignable ( MASIG| MENOSIG| PORIG | DIVIG | MODIG) expresion ;
 inc_dec: asignable (INC | DEC) ;
 
-si_stmt: TKIF expresion bloque (TKELSE (bloque | si_stmt))? ;
+si_stmt: TKIF (init ';')? expresion bloque (TKELSE (bloque | si_stmt))? ;
 
-imprimir: TKPRINT '(' listaexp ')';
+imprimir: (TKPRINTLN | TKPRINT) '(' listaexp? ')';
 
 // ---  SWITCH ---
 switch: TKSWITCH expresion '{' case* default? '}' ;
@@ -93,47 +94,32 @@ llamada_stmt: IDNAME '(' listaexp? ')' ;
 
 
 expresion:
-         // Operaciones aritméticas - ordenadas por precedencia (menor a mayor)
-         '-' expresion                             #ExprUnaria
-        | '!' expresion                               #ExprNot
-
-       
-
-        
-        | '(' expresion ')'                         #ExprAgrupacion
-        //arreglos
-        | expresion '[' expresion ']'              #ExprArregloAcceso     
-        | tipo_var '{' lista_valores? '}'          #ExprArregloLiteral   
-        
-        | expresion ('*' | '/' | '%') expresion     #ExprMultiplicacion
-        |expresion ('+' | '-') expresion             #ExprSuma
-        //Operaciones de comparación (¡CAMBIA ESTA LÍNEA!)
+         '-' expresion                                                     #ExprUnaria
+        | '!' expresion                                                    #ExprNot
+        | '(' expresion ')'                                                #ExprAgrupacion
+        | expresion '[' expresion ']'                                      #ExprArregloAcceso
+        | optipo '(' expresion ')'                                         #ExprCasteo
+        | tipo_var '{' lista_valores? '}'                                  #ExprArregloLiteral
+        | expresion ('*' | '/' | '%') expresion                            #ExprMultiplicacion
+        | expresion ('+' | '-') expresion                                  #ExprSuma
         | expresion (IGUAL_IGUAL | DIFERENTE | MENOR_IGUAL | MAYOR_IGUAL | MENOR | MAYOR) expresion  #ExprComparacion
-        //Lógicos (Tienen la menor precedencia)
-        | expresion TKAND expresion                   #ExprAnd
-        | expresion TKOR expresion                    #ExprOr
-        // Llamadas a funciones, Referencias y Desreferencias
-        | IDNAME '(' listaexp? ')'                 #ExprLlamada         // suma(3, 4)
-        | REFERENCIA asignable                     #ExprReferencia      // &nums2
-        | PUNTERO asignable                        #ExprDesreferencia   // *a
-
-        // Agrupación, Acceso a Arreglos y Literales de Arreglos
-        | '(' expresion ')'                        #ExprAgrupacion
-        | expresion '[' expresion ']'              #ExprArregloAcceso      // <--- NUEVO: nums[0]
-        | tipo_var '{' lista_valores? '}'          #ExprArregloLiteral     // <--- NUEVO: [3]int32{1, 2, 3}
-    
-        
-
-        // Expresiones primarias
-        | INT                                       #ExprEntero
-        | FLOAT                                     #ExprDecimal
-        | BOOL                                      #ExprBooleano
-        | STRING                                    #ExprCadena
-        | IDNAME                                    #ExprIdentificador
+        | expresion (TKNOT TKIN | TKIN) '[' expresion RANGO expresion ']' #ExprRango
+        | expresion TKAND expresion                                        #ExprAnd
+        | expresion TKOR expresion                                         #ExprOr
+        | IDNAME '(' listaexp? ')'                                         #ExprLlamada
+        | REFERENCIA asignable                                             #ExprReferencia
+        | PUNTERO asignable                                                #ExprDesreferencia
+        | NIL                                                              #ExprNil
+        | RUNE                                                             #ExprCaracter
+        | INT                                                              #ExprEntero
+        | FLOAT                                                            #ExprDecimal
+        | BOOL                                                             #ExprBooleano
+        | STRING                                                           #ExprCadena
+        | IDNAME                                                           #ExprIdentificador
         ;
 
         // --- REGLAS PARA VALORES DE ARREGLOS LITERALES ---
-lista_valores: lista_valor (',' lista_valor)* ;
+lista_valores: lista_valor (',' lista_valor)* ','? ;
 lista_valor: expresion | '{' lista_valores? '}' ; // Permite anidar {{1, 2}, {3, 4}}
         
 optipo:
@@ -165,6 +151,11 @@ MAYOR: '>';
 // Tokens Logicos
 TKAND: '&&';
 TKOR: '||';
+
+
+TKIN: 'in';
+TKNOT: 'not';
+RANGO: '..';
 // ? TK asignacion
 TKVAR: 'var';
 TKCONST: 'const';
@@ -178,10 +169,12 @@ MASIG: '+=';
 MENOSIG: '-=';
 PORIG: '*=';
 DIVIG: '/=';
+MODIG: '%=';
 //? Bloque de sentrencia principal */
 
 //?TK_FUNCIONES SISTEMA
 TKFUNC: 'func';
+TKPRINTLN: 'fmt.Println';
 TKPRINT: 'fmt.Print';
 // TKLEN: 'len';
 // TKNOW: 'now';
@@ -209,11 +202,12 @@ REFERENCIA: '&';
 
 
 BOOL: 'true' | 'false';
+RUNE: '\'' ( '\\' . | ~['\\] ) '\'';
 STRING: '"' ( '\\' . | ~["\\] )* '"';
 UNICODE : '\\u' [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F];
 IDNAME: [a-zA-Z_][a-zA-Z0-9_]*;
-INT: [-]*[0-9][0-9]*;
-FLOAT: [-]*[0-9]+ '.' [0-9]+;
+INT: [0-9][0-9]*;
+FLOAT: [0-9]+ '.' [0-9]+;
 COMENT: '//' ~[\r\n]* -> skip;
 MULTILINE_COMMENT: '/*' .*? '*/' -> skip;
 WS: [ \t\r\n]+ -> skip;

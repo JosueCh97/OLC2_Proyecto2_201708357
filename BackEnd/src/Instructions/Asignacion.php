@@ -7,11 +7,13 @@ use App\Entorno\Entorno;
 use App\Utilities\TipoInstruccion;
 use App\Utilities\Salida;
 use App\Utilities\ValorArreglo; // IMPORTANTE: Agregado para poder leer la clase
+use App\Utilities\Tipo;
+use App\Utilities\TipoRetorno;
 
 class Asignacion extends Instruction {
     // Usamos Union Types para soportar x = 5 o x,y = 5,7
-    private string|array $id;
-    private Expresion|array $valor;
+    public string|array $id;
+    public Expresion|array $valor;
 
     public function __construct(int $linea, int $columna, string|array $id, Expresion|array $valor) {
         parent::__construct($linea, $columna, TipoInstruccion::ASIGNACION);
@@ -34,74 +36,67 @@ class Asignacion extends Instruction {
     }
 
     public function ejecutar(Entorno $entorno): mixed {
+        $valoresEvaluados = [];
         
-        // --- CASO 1: Asignación simple (ej: x = 5) ---
-        if (is_string($this->id) && $this->valor instanceof Expresion) {
-            $valorEvaluado = $this->valor->ejecutar($entorno);
-            
-            // Verificar si la variable existe
-            $simbolo = $entorno->getVariable($this->id);
-            
-            if ($simbolo === null) {
-                Salida::$salidasConsola[] = "❌ Error: La variable '{$this->id}' no existe [Línea {$this->linea}]";
-                return null;
-            }
-            
-            if ($simbolo->isConst === true) {
-                Salida::$salidasConsola[] = "❌ Error: No se puede reasignar la constante '{$this->id}' [Línea {$this->linea}]";
-                return null;
-            }
-            
-            // APLICAMOS EL FORMATEO SEGURO ANTES DE IMPRIMIR
-            $valorAImprimir = $this->formatearSalida($valorEvaluado->valor);
-            
-            // Actualizar el valor
-            $entorno->setVariable($this->id, $valorEvaluado->valor);
-            Salida::$salidasConsola[] = "→ Asignación: '{$this->id}' = {$valorAImprimir}";
-            Salida::$salidasConsola[] = "✓ Variable actualizada exitosamente\n";
-        }
+        // 1. Aseguramos que $this->valor sea un arreglo iterativo
+        $expresiones = is_array($this->valor) ? $this->valor : [$this->valor];
         
-        // --- CASO 2: Asignación múltiple (ej: x, y = 5, 7) ---
-        elseif (is_array($this->id) && is_array($this->valor)) {
+        foreach ($expresiones as $exp) {
+            $resultado = $exp->ejecutar($entorno);
             
-            if (count($this->id) !== count($this->valor)) {
-                Salida::$salidasConsola[] = "❌ Error: La cantidad de variables (" . count($this->id) . ") no coincide con la cantidad de valores (" . count($this->valor) . ") [Línea {$this->linea}]";
-                return null;
-            }
-            
-            Salida::$salidasConsola[] = "→ Asignación múltiple:";
-            
-            for ($i = 0; $i < count($this->id); $i++) {
-                $nombreVar = $this->id[$i];
-                $expresionValor = $this->valor[$i];
-                $num = $i + 1;
-                
-                $valorEvaluado = $expresionValor->ejecutar($entorno);
-                
-                // Verificar si existe
-                $simbolo = $entorno->getVariable($nombreVar);
-                
-                if ($simbolo === null) {
-                    Salida::$salidasConsola[] = "  [$num] ❌ '{$nombreVar}' - No existe";
-                    continue;
+            // Compatibilidad: retorno multiple antiguo como array directo.
+            if (is_array($resultado)) {
+                foreach ($resultado as $res) {
+                    $valoresEvaluados[] = $res;
                 }
-                
-                if ($simbolo->isConst === true) {
-                    Salida::$salidasConsola[] = "  [$num] ❌ '{$nombreVar}' - Es una constante";
-                    continue;
+            // Retorno multiple actual: TipoRetorno con tipo LISTA.
+            } elseif (
+                $resultado instanceof TipoRetorno
+                && $resultado->tipo === Tipo::LISTA
+                && is_array($resultado->valor)
+            ) {
+                foreach ($resultado->valor as $res) {
+                    $valoresEvaluados[] = $res;
                 }
-                
-                // APLICAMOS EL FORMATEO SEGURO ANTES DE IMPRIMIR
-                $valorAImprimir = $this->formatearSalida($valorEvaluado->valor);
-                
-                $entorno->setVariable($nombreVar, $valorEvaluado->valor);
-                Salida::$salidasConsola[] = "  [$num] '{$nombreVar}' = {$valorAImprimir}";
-                Salida::$salidasConsola[] = "       ✓ Actualizada exitosamente";
+            } else {
+                $valoresEvaluados[] = $resultado;
             }
-            
-            Salida::$salidasConsola[] = "✓ Proceso completado\n";
         }
 
+        // 2. Aseguramos que $this->id sea un arreglo
+        $destinos = is_array($this->id) ? $this->id : [$this->id];
+
+        // 3. Verificamos la cantidad ya con los valores reales desempacados
+        if (count($destinos) !== count($valoresEvaluados)) {
+            Salida::$errores[] = "❌ Error Semántico [Línea {$this->linea}]: Destinos (" . count($destinos) . ") no coincide con valores devueltos (" . count($valoresEvaluados) . ").";
+            return null;
+        }
+
+        // 4. Asignamos uno por uno en la tabla de símbolos
+        for ($i = 0; $i < count($destinos); $i++) {
+            $nombreVar = $destinos[$i];
+            $valorEval = $valoresEvaluados[$i];
+            
+            $simbolo = $entorno->getVariable($nombreVar);
+            if ($simbolo === null) {
+                $msg = "❌ Error Semántico [Línea {$this->linea}]: La variable '{$nombreVar}' no existe en este entorno.";
+                Salida::$errores[] = $msg;
+                Salida::$salidasConsola[] = $msg;
+                continue;
+            }
+
+            if ($simbolo->isConst === true) {
+                $msg = "❌ Error Semántico [Línea {$this->linea}]: No se puede modificar '{$nombreVar}' porque es constante.";
+                Salida::$errores[] = $msg;
+                Salida::$salidasConsola[] = $msg;
+                continue;
+            }
+
+            $entorno->setVariable($nombreVar, $valorEval->valor);
+        }
+        
         return null;
     }
-}
+
+   
+}// FIN DE CLASE

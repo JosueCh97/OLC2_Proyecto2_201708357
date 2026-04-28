@@ -63,19 +63,7 @@ class CustomVisitor extends GolampiBaseVisitor {
         }
 
         // --- EXTRACCIÓN DE IDs ---
-        $ids = [];
-        
-        // listaCtx puede ser un array de contextos o un solo contexto
-        // Usamos un loop para obtener cada ID
-        $listaIdCtx = $ctx->listids();
-        while ($listaIdCtx !== null) {
-            $idname = $listaIdCtx->IDNAME();
-            if ($idname !== null) {
-                $ids[] = $idname->getText();
-            }
-            // Intentamos ir al siguiente en la recursión
-            $listaIdCtx = $listaIdCtx->listids();
-        }
+        $ids = $this->extraerIdsDeListids($listaCtx);
 
         // --- EXTRACCIÓN DE EXPRESIONES (VALORES) ---
         $valores = [];
@@ -130,7 +118,7 @@ class CustomVisitor extends GolampiBaseVisitor {
             );
             return null;
         }
-        $tipoDato = $this->visitOptipo($tipoVarCtx->optipo());
+        list($tipoDato, $dimensionesExpr) = $this->analizarTipoVar($tipoVarCtx);
         // --- RETORNAR EL NODO AST ---
         // En lugar de hacer echo, construimos nuestro objeto DeclaracionID
         return new DeclaracionID(
@@ -138,8 +126,9 @@ class CustomVisitor extends GolampiBaseVisitor {
             $ctx->getStart()->getCharPositionInLine(), 
             count($ids) === 1 ? $ids[0] : $ids, // Si es uno, mandamos string, si son varios, mandamos array
             $tipoDato, 
-            count($valores) === 1 ? $valores[0] : $valores
-            ,$isconst
+            count($valores) === 1 ? $valores[0] : $valores,
+            $isconst,
+            $dimensionesExpr
         );
 
 
@@ -197,6 +186,33 @@ class CustomVisitor extends GolampiBaseVisitor {
         return array_reverse($expresionesTemp);
     }
 
+    private function extraerIdsDeListids($listaCtx): array {
+        $ids = [];
+
+        while ($listaCtx !== null) {
+            $idNode = $listaCtx->IDNAME();
+            if ($idNode !== null) {
+                $ids[] = $idNode->getText();
+            }
+            $listaCtx = $listaCtx->listids();
+        }
+
+        return array_reverse($ids);
+    }
+
+    private function construirIndicesDesdeAsignable($asignableCtx): array {
+        $indices = [];
+        $indicesCtx = $asignableCtx !== null ? $asignableCtx->expresion() : null;
+
+        if (is_array($indicesCtx)) {
+            foreach ($indicesCtx as $indiceCtx) {
+                $indices[] = $this->visit($indiceCtx);
+            }
+        }
+
+        return $indices;
+    }
+
 
 
     // ==========================================
@@ -240,6 +256,18 @@ class CustomVisitor extends GolampiBaseVisitor {
         return $this->visit($ctx->expresion());
     }
 
+    public function visitExprCasteo($ctx) {
+        $tipoDestino = $this->visitOptipo($ctx->optipo());
+        $valor = $this->visit($ctx->expresion());
+
+        return new \App\Expressions\Casteo(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $tipoDestino,
+            $valor
+        );
+    }
+
     // ==========================================
     // VALORES PRIMITIVOS
     // ==========================================
@@ -261,7 +289,7 @@ class CustomVisitor extends GolampiBaseVisitor {
     public function visitExprCadena($ctx) {
         // Quitamos las comillas del string
         $texto = $ctx->STRING()->getText();
-        $textoLimpio = substr($texto, 1, -1); 
+        $textoLimpio = stripcslashes(substr($texto, 1, -1));
         
         return new \App\Expressions\Primitivo(
             $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
@@ -275,6 +303,28 @@ class CustomVisitor extends GolampiBaseVisitor {
             $ctx->BOOL()->getText(), \App\Utilities\Tipo::BOOLEANO
         );
     }
+
+    public function visitExprCaracter($ctx) {
+        $texto = $ctx->RUNE()->getText();
+        $textoLimpio = stripcslashes(substr($texto, 1, -1));
+
+        return new \App\Expressions\Primitivo(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $textoLimpio,
+            \App\Utilities\Tipo::CARACTER
+        );
+    }
+
+    public function visitExprNil($ctx) {
+        return new \App\Expressions\Primitivo(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            null,
+            \App\Utilities\Tipo::NIL
+        );
+    }
+
     public function visitExprIdentificador($ctx) {
         // Instanciamos AccesoID pasándole la línea, columna y el nombre de la variable
         return new \App\Expressions\AccesoID(
@@ -302,6 +352,22 @@ public function visitExprComparacion($ctx) {
             $izq,
             $signo,
             $der
+        );
+    }
+
+    public function visitExprRango($ctx) {
+        $valor = $this->visit($ctx->expresion(0));
+        $inicio = $this->visit($ctx->expresion(1));
+        $fin = $this->visit($ctx->expresion(2));
+        $esNegado = $ctx->TKNOT() !== null;
+
+        return new \App\Expressions\Rango(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $valor,
+            $inicio,
+            $fin,
+            $esNegado
         );
     }
 
@@ -369,8 +435,11 @@ public function visitExprComparacion($ctx) {
         foreach ($exprCtxs as $exprCtx) {
             $valores[] = $this->visit($exprCtx);
         }
+        
 
-        if (count($asignables) !== count($valores)) {
+
+
+        if (count($asignables) !== count($valores) && count($valores) !== 1  ) {
             Salida::reportarError(
                 'Sintactico',
                 'La cantidad de destinos no coincide con la cantidad de valores',
@@ -384,6 +453,7 @@ public function visitExprComparacion($ctx) {
         if (count($asignables) === 1) {
             $asignable = $asignables[0];
             $idToken = $asignable !== null ? $asignable->IDNAME() : null;
+            $esPuntero = $asignable !== null && $asignable->PUNTERO() !== null;
             if ($idToken === null) {
                 Salida::reportarError(
                     'Sintactico',
@@ -394,12 +464,15 @@ public function visitExprComparacion($ctx) {
                 return null;
             }
 
-            $indicesCtx = $asignable->expresion();
-            $indices = [];
-            if (is_array($indicesCtx)) {
-                foreach ($indicesCtx as $indiceCtx) {
-                    $indices[] = $this->visit($indiceCtx);
-                }
+            $indices = $this->construirIndicesDesdeAsignable($asignable);
+
+            if ($esPuntero) {
+                return new \App\Instructions\AsignacionPuntero(
+                    $ctx->getStart()->getLine(),
+                    $ctx->getStart()->getCharPositionInLine(),
+                    $idToken->getText(),
+                    $valores[0]
+                );
             }
 
             if (!empty($indices)) {
@@ -434,6 +507,16 @@ public function visitExprComparacion($ctx) {
                 return null;
             }
 
+            if ($asignable->PUNTERO() !== null) {
+                Salida::reportarError(
+                    'Sintactico',
+                    'No se soporta asignacion multiple con destinos desreferenciados',
+                    $ctx->getStart()->getLine(),
+                    $ctx->getStart()->getCharPositionInLine()
+                );
+                return null;
+            }
+
             $indicesCtx = $asignable->expresion();
             if (is_array($indicesCtx) && count($indicesCtx) > 0) {
                 Salida::reportarError(
@@ -458,18 +541,28 @@ public function visitExprComparacion($ctx) {
 
 
 
-
-    
-
- public function visitAsig_compuesta($ctx) {
+public function visitAsig_compuesta($ctx) {
         $asignableCtx = $ctx->asignable();
         $id = $asignableCtx->IDNAME()->getText();
+        
+        // REGRESAMOS A TU CÓDIGO ORIGINAL: Usamos expresion() en lugar de listaexp()
         $valor = $this->visit($ctx->expresion());
+        
         $operador = $ctx->getChild(1)->getText(); // +=, -=, *=, /=
+
+        if ($asignableCtx->PUNTERO() !== null) {
+            \App\Utilities\Salida::reportarError(
+                'Sintactico',
+                'Asignacion compuesta sobre punteros no soportada aun',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
 
         // Validamos que no intenten hacer nums[0] += 5 por ahora
         if (count($asignableCtx->expresion()) > 0) {
-            Salida::reportarError(
+            \App\Utilities\Salida::reportarError(
                 'Sintactico',
                 'Asignacion compuesta en arreglos no soportada aun',
                 $ctx->getStart()->getLine(),
@@ -478,16 +571,33 @@ public function visitExprComparacion($ctx) {
             return null;
         }
 
+        // ✅ EL ÚNICO CAMBIO QUE NECESITABAS: El orden ($id, $operador, $valor)
         return new \App\Instructions\AsignacionCompuesta(
-            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
-            $id, $valor, $operador
+            $ctx->getStart()->getLine(), 
+            $ctx->getStart()->getCharPositionInLine(),
+            $id, 
+            $operador, 
+            $valor
         );
     }
+    
+
+
 
  public function visitInc_dec($ctx) {
         $asignableCtx = $ctx->asignable();
         $id = $asignableCtx->IDNAME()->getText();
         $operador = $ctx->getChild(1)->getText(); // ++ o --
+
+        if ($asignableCtx->PUNTERO() !== null) {
+            Salida::reportarError(
+                'Sintactico',
+                'Incremento/Decremento sobre punteros no soportado aun',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
 
         // Validamos que no intenten hacer nums[0]++ por ahora
         if (count($asignableCtx->expresion()) > 0) {
@@ -511,31 +621,57 @@ public function visitExprComparacion($ctx) {
     // ==========================================
 
 
-    // --- VISITOR PARA EL BLOQUE ---
-    public function visitBloque($ctx) {
+    // // --- VISITOR PARA EL BLOQUE ---
+    // public function visitBloque($ctx) {
+    //     $instrucciones = [];
+    //     // Recorremos todas las instrucciones que haya dentro de las llaves { }
+    //     foreach ($ctx->instruccion() as $instCtx) {
+    //         $instrucciones[] = $this->visit($instCtx);
+    //     }
+        
+    //     return new \App\Instructions\Bloque(
+    //         $ctx->getStart()->getLine(),
+    //         $ctx->getStart()->getCharPositionInLine(),
+    //         $instrucciones
+    //     );
+    // }
+
+ public function visitBloque($ctx) {
         $instrucciones = [];
-        // Recorremos todas las instrucciones que haya dentro de las llaves { }
-        foreach ($ctx->instruccion() as $instCtx) {
-            $instrucciones[] = $this->visit($instCtx);
+        
+        // Verificamos si hay instrucciones dentro de las llaves { }
+        if ($ctx->instruccion() !== null) {
+            foreach ($ctx->instruccion() as $instruccionCtx) {
+                $nodo = $this->visit($instruccionCtx);
+                
+                // ✅ Solo guardamos si NO es null (ignoramos errores sintácticos)
+                if ($nodo !== null) {
+                    $instrucciones[] = $nodo;
+                }
+            }
         }
         
-        return new \App\Instructions\Bloque(
-            $ctx->getStart()->getLine(),
-            $ctx->getStart()->getCharPositionInLine(),
-            $instrucciones
-        );
+        // ✅ EL PASO QUE FALTABA: Obtener línea/columna y retornar el OBJETO Bloque
+        $linea = $ctx->getStart()->getLine();
+        $columna = $ctx->getStart()->getCharPositionInLine();
+        
+        return new \App\Instructions\Bloque($linea, $columna, $instrucciones);
     }
 
     //!  SALIDA (PRINT)
     // --- VISITOR PARA IMPRIMIR ---
     public function visitImprimir($ctx) {
         // Obtenemos el arreglo plano de expresiones visitando la lista
-        $expresiones = $this->visit($ctx->listaexp());
-        
+        $expresiones = $ctx->listaexp() !== null ? $this->visit($ctx->listaexp()) : [];
+
+        // true = fmt.Println (agrega \n al final), false = fmt.Print (sin \n)
+        $esNewLine = $ctx->TKPRINTLN() !== null;
+
         return new \App\Instructions\Imprimir(
             $ctx->getStart()->getLine(),
             $ctx->getStart()->getCharPositionInLine(),
-            $expresiones
+            $expresiones,
+            $esNewLine
         );
     }
 
@@ -562,6 +698,7 @@ public function visitExprComparacion($ctx) {
 
     // --- VISITOR PARA EL IF / ELSE IF / ELSE ---
     public function visitSi_stmt($ctx) {
+        $init = $ctx->init() !== null ? $this->visit($ctx->init()) : null;
         $condicion = $this->visit($ctx->expresion());
         $bloqueIf = $this->visit($ctx->bloque(0)); // El primer bloque siempre es el del IF
         
@@ -579,13 +716,31 @@ public function visitExprComparacion($ctx) {
             }
         }
         
-        return new \App\Instructions\Si(
+        $si = new \App\Instructions\Si(
             $ctx->getStart()->getLine(),
             $ctx->getStart()->getCharPositionInLine(),
             $condicion,
             $bloqueIf,
             $bloqueElse
         );
+
+        if ($init === null) {
+            return $si;
+        }
+
+        return new \App\Instructions\Bloque(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            [$init, $si]
+        );
+    }
+
+    public function visitInit($ctx) {
+        return $this->visitChildren($ctx);
+    }
+
+    public function visitPost($ctx) {
+        return $this->visitChildren($ctx);
     }
 
 
@@ -748,6 +903,50 @@ public function visitExprArregloAcceso($ctx) {
             $ctx->getStart()->getCharPositionInLine(),
             $id,
             [$indiceNuevo]
+        );
+    }
+
+    public function visitExprReferencia($ctx) {
+        $asignableCtx = $ctx->asignable();
+        $idToken = $asignableCtx !== null ? $asignableCtx->IDNAME() : null;
+
+        if ($asignableCtx === null || $idToken === null || $asignableCtx->PUNTERO() !== null) {
+            Salida::reportarError(
+                'Sintactico',
+                'Referencia invalida',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
+
+        return new \App\Expressions\Referencia(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $idToken->getText(),
+            $this->construirIndicesDesdeAsignable($asignableCtx)
+        );
+    }
+
+    public function visitExprDesreferencia($ctx) {
+        $asignableCtx = $ctx->asignable();
+        $idToken = $asignableCtx !== null ? $asignableCtx->IDNAME() : null;
+
+        if ($asignableCtx === null || $idToken === null || $asignableCtx->PUNTERO() !== null) {
+            Salida::reportarError(
+                'Sintactico',
+                'Desreferencia invalida',
+                $ctx->getStart()->getLine(),
+                $ctx->getStart()->getCharPositionInLine()
+            );
+            return null;
+        }
+
+        return new \App\Expressions\Desreferencia(
+            $ctx->getStart()->getLine(),
+            $ctx->getStart()->getCharPositionInLine(),
+            $idToken->getText(),
+            $this->construirIndicesDesdeAsignable($asignableCtx)
         );
     }
 

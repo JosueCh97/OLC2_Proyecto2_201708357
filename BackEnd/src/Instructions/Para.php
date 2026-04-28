@@ -9,10 +9,10 @@ use App\Utilities\Tipo;
 use App\Utilities\Salida;
 
 class Para extends Instruction {
-    private ?Instruction $init;
-    private ?Expresion $condicion;
-    private ?Instruction $post;
-    private Bloque $bloque;
+    public ?Instruction $init;
+    public ?Expresion $condicion;
+    public ?Instruction $post;
+    public Bloque $bloque;
 
     public function __construct(int $linea, int $columna, ?Instruction $init, ?Expresion $condicion, ?Instruction $post, Bloque $bloque) {
         parent::__construct($linea, $columna, TipoInstruccion::PARA ?? 'FOR');
@@ -52,23 +52,25 @@ class Para extends Instruction {
 
             // 5. Ejecutamos el bloque de código (el Bloque creará su propio entorno hijo en cada vuelta)
             $resultadoBloque = $this->bloque->ejecutar($entornoFor);
-
             // 6. Atrapamos las señales de BREAK, CONTINUE o RETURN
             if (is_array($resultadoBloque) && isset($resultadoBloque["control"])) {
                 if ($resultadoBloque["control"] === "BREAK") {
                     break; // Rompemos el ciclo while(true)
                 }
                 if ($resultadoBloque["control"] === "CONTINUE") {
-                    // El continue salta directamente al paso de actualización (ej: i++)
                     if ($this->post !== null) {
                         $this->post->ejecutar($entornoFor);
                     }
-                    continue; // Pasa a la siguiente iteración del while
+                    continue; 
+                }
+                // 🔥 LA MAGIA QUE FALTABA: Propagar el RETURN 🔥
+                if ($resultadoBloque["control"] === "RETURN") {
+                    return $resultadoBloque; 
                 }
             } else if ($resultadoBloque !== null) {
-                // Si devuelve otra cosa (ej. Return), lo propagamos hacia afuera
                 return $resultadoBloque;
             }
+           
 
             // 7. Ejecutamos la actualización al final de cada vuelta normal (ej: i++)
             if ($this->post !== null) {

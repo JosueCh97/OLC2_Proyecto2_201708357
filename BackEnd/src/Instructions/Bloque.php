@@ -8,7 +8,7 @@ use App\Utilities\Salida;
 
 class Bloque extends Instruction {
     /** @var Instruction[] */
-    private array $instrucciones;
+    public array $instrucciones;
 
     public function __construct(int $linea, int $columna, array $instrucciones) {
         parent::__construct($linea, $columna, TipoInstruccion::BLOQUE_INSTRUCCIONES);

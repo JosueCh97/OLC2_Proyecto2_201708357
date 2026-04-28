@@ -1,0 +1,3 @@
+var x int32 = 10
+fmt.Println( x in [5..10] )
+fmt.Println( x not in [11..20] )

@@ -61,7 +61,7 @@ class SimboloTabla {
             Tipo::BOOLEANO => "booleano",
             Tipo::CARACTER => "caracter",
             Tipo::CADENA => "cadena",
-            Tipo::NULL => "null",
+            Tipo::NIL => "null",
             default => "desconocido",
         };
     }

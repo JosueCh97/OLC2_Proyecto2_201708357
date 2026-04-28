@@ -13,7 +13,7 @@ use App\Utilities\Salida; // <-- IMPORTANTE: Importamos la clase Salida para mos
 
 try {
     // 1. Leer el archivo de prueba
-    $input = InputStream::fromPath(__DIR__ . '/test.txt');
+    $input = InputStream::fromPath(__DIR__ . '/testD.txt');
 
     // 2. Análisis Léxico (Tokens)
     $lexer = new GolampiLexer($input);
@@ -254,9 +254,13 @@ try {
     // 6. Imprimir el JSON
     echo json_encode($respuestaAPI, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 } catch (\Throwable $e) {
+    // 🔥 Ahora capturamos el Archivo y la Línea exacta del error
+    $respuestaAPI = [
+        "error" => "Excepcion durante interpretacion",
+        "detalle" => $e->getMessage() . " | EN EL ARCHIVO: " . basename($e->getFile()) . " | LÍNEA: " . $e->getLine()
+    ];
+    
+    // Aseguramos que se envíe como JSON
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode([
-        'error' => 'Excepcion durante interpretacion',
-        'detalle' => $e->getMessage(),
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    echo json_encode($respuestaAPI, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }

@@ -1,0 +1,11 @@
+package main
+import "fmt"
+
+func main() {
+    s := "hola mundo"
+    fmt.Println(len(s))
+    fmt.Println(typeOf(s))
+    fmt.Println(typeOf(42))
+    fmt.Println(substr(s, 5, 5))
+    fmt.Println(now())
+}

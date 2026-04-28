@@ -7,7 +7,7 @@ use App\Utilities\TipoInstruccion;
 use App\Expressions\Llamada;
 
 class LlamadaInstr extends Instruction {
-    private Llamada $llamada;
+    public Llamada $llamada;
 
     public function __construct(int $linea, int $columna, Llamada $llamada) {
         parent::__construct($linea, $columna, TipoInstruccion::LLAMADA_INSTR ?? 'LLAMADA_INSTR');

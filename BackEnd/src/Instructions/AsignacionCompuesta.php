@@ -10,9 +10,9 @@ use App\Utilities\Tipo;
 use App\Utilities\OperacionDominante;
 
 class AsignacionCompuesta extends Instruction {
-    private string $id;
-    private string $operador;
-    private ?Expresion $expresion; // Puede ser null si es ++ o --
+    public string $id;
+    public string $operador;
+    public ?Expresion $expresion; // Puede ser null si es ++ o --
 
     public function __construct(int $linea, int $columna, string $id, string $operador, ?Expresion $expresion = null) {
         parent::__construct($linea, $columna, TipoInstruccion::INCREMENTO); // O ASIGNACION_COMPUESTA
@@ -73,15 +73,18 @@ class AsignacionCompuesta extends Instruction {
                 '-=' => $valorActual - $resultadoExp->valor,
                 '*=' => $valorActual * $resultadoExp->valor,
                 '/=' => $resultadoExp->valor != 0 ? $valorActual / $resultadoExp->valor : null,
+                '%=' => $resultadoExp->valor != 0 ? $valorActual % $resultadoExp->valor : null,
                 default => null
             };
 
-            if ($nuevoValor === null && $this->operador === '/=') {
-                Salida::$salidasConsola[] = "❌ Error Semántico [Línea {$this->linea}]: División por cero en asignación compuesta.";
+            if ($nuevoValor === null && ($this->operador === '/=' || $this->operador === '%=')) {
+                $detalle = $this->operador === '/=' ? 'División por cero' : 'Módulo por cero';
+                Salida::$errores[] = "❌ Error Semántico [Línea {$this->linea}]: {$detalle} en asignación compuesta.";
+                Salida::$salidasConsola[] = "❌ Error Semántico [Línea {$this->linea}]: {$detalle} en asignación compuesta.";
                 return null;
             }
 
-            Salida::$salidasConsola[] = "🔄 Modificación [Línea {$this->linea}]: {$this->id} {$this->operador} {$resultadoExp->valor}  -> Nuevo valor: {$nuevoValor}";
+           // Salida::$salidasConsola[] = "🔄 Modificación [Línea {$this->linea}]: {$this->id} {$this->operador} {$resultadoExp->valor}  -> Nuevo valor: {$nuevoValor}";
         }
 
         // 5. Guardamos el nuevo valor en la memoria

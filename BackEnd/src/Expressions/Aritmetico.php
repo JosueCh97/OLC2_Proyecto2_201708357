@@ -173,7 +173,7 @@ class Aritmetico extends Expresion {
     private function error(string $mensaje): TipoRetorno {
         $msgError = "❌ Error Semántico [Línea {$this->linea}]: $mensaje";
         Salida::$errores[] = $msgError;
-        Salida::$salidasConsola[] = $msgError;
+       // Salida::$salidasConsola[] = $msgError;
         
         return new TipoRetorno(null, Tipo::NIL);
     }
@@ -181,12 +181,12 @@ class Aritmetico extends Expresion {
     // Método para registrar las operaciones aritméticas en consola
     private function registrarOperacion($operando1, string $operador, $operando2, $resultado): void {
         $detalleOperacion = "📊 Operación [Línea {$this->linea}]: {$operando1} {$operador} {$operando2} = {$resultado}";
-        Salida::$salidasConsola[] = $detalleOperacion;
+       // Salida::$salidasConsola[] = $detalleOperacion;
     }
 
     // Método para registrar operaciones unarias
     private function registrarOperacionUnaria(string $operador, $operando, $resultado): void {
         $detalleOperacion = "📊 Operación Unaria [Línea {$this->linea}]: {$operador}{$operando} = {$resultado}";
-        Salida::$salidasConsola[] = $detalleOperacion;
+       // Salida::$salidasConsola[] = $detalleOperacion;
     }
 }

@@ -336,6 +336,16 @@ interface GolampiVisitor extends ParseTreeVisitor
 	public function visitExprBooleano(Context\ExprBooleanoContext $context);
 
 	/**
+	 * Visit a parse tree produced by the `ExprRango` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprRangoContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprRango(Context\ExprRangoContext $context);
+
+	/**
 	 * Visit a parse tree produced by the `ExprSuma` labeled alternative
 	 * in {@see GolampiParser::expresion()}.
 	 *
@@ -386,6 +396,16 @@ interface GolampiVisitor extends ParseTreeVisitor
 	public function visitExprReferencia(Context\ExprReferenciaContext $context);
 
 	/**
+	 * Visit a parse tree produced by the `ExprCaracter` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprCaracterContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprCaracter(Context\ExprCaracterContext $context);
+
+	/**
 	 * Visit a parse tree produced by the `ExprLlamada` labeled alternative
 	 * in {@see GolampiParser::expresion()}.
 	 *
@@ -406,6 +426,16 @@ interface GolampiVisitor extends ParseTreeVisitor
 	public function visitExprNot(Context\ExprNotContext $context);
 
 	/**
+	 * Visit a parse tree produced by the `ExprNil` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprNilContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprNil(Context\ExprNilContext $context);
+
+	/**
 	 * Visit a parse tree produced by the `ExprAnd` labeled alternative
 	 * in {@see GolampiParser::expresion()}.
 	 *
@@ -424,6 +454,16 @@ interface GolampiVisitor extends ParseTreeVisitor
 	 * @return mixed The visitor result.
 	 */
 	public function visitExprDecimal(Context\ExprDecimalContext $context);
+
+	/**
+	 * Visit a parse tree produced by the `ExprCasteo` labeled alternative
+	 * in {@see GolampiParser::expresion()}.
+	 *
+	 * @param Context\ExprCasteoContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitExprCasteo(Context\ExprCasteoContext $context);
 
 	/**
 	 * Visit a parse tree produced by the `ExprArregloAcceso` labeled alternative

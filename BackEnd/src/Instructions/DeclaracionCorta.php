@@ -7,12 +7,14 @@ use App\Entorno\Entorno;
 use App\Utilities\TipoInstruccion;
 use App\Utilities\Salida;
 use App\Utilities\ValorArreglo;
+use App\Utilities\Tipo;
+use App\Utilities\TipoRetorno;
 
 class DeclaracionCorta extends Instruction {
     /** @var string[] */
-    private array $ids;
+    public array $ids;
     /** @var Expresion[] */
-    private array $valores;
+    public array $valores;
 
     public function __construct(int $linea, int $columna, array $ids, array $valores) {
         parent::__construct($linea, $columna, TipoInstruccion::CREAR_VARIABLE ?? 'DECLARACION_CORTA');
@@ -41,18 +43,46 @@ class DeclaracionCorta extends Instruction {
             return null;
         }
 
-        // 2. Validar misma cantidad de variables que de valores
-        if (count($this->ids) !== count($this->valores)) {
+        // 2. Evaluar y aplanar valores por si hay retorno multiple de una funcion.
+        $valoresEvaluados = [];
+        foreach ($this->valores as $expresion) {
+            $resultado = $expresion->ejecutar($entorno);
+
+            // Compatibilidad: retorno multiple antiguo como array directo.
+            if (is_array($resultado)) {
+                foreach ($resultado as $res) {
+                    $valoresEvaluados[] = $res;
+                }
+                continue;
+            }
+
+            // Retorno multiple actual: TipoRetorno con tipo LISTA.
+            if (
+                $resultado instanceof TipoRetorno
+                && $resultado->tipo === Tipo::LISTA
+                && is_array($resultado->valor)
+            ) {
+                foreach ($resultado->valor as $res) {
+                    $valoresEvaluados[] = $res;
+                }
+                continue;
+            }
+
+            $valoresEvaluados[] = $resultado;
+        }
+
+        // 3. Validar misma cantidad de variables que de valores evaluados
+        if (count($this->ids) !== count($valoresEvaluados)) {
             Salida::$errores[] = "❌ Error [Línea {$this->linea}]: La cantidad de variables no coincide con la cantidad de valores.";
             Salida::$salidasConsola[] = "❌ Error [Línea {$this->linea}]: La cantidad de variables no coincide con la cantidad de valores.";
             return null;
         }
 
-        // 3. Validar regla de Go: Al menos una variable debe ser nueva
+        // 4. Validar regla de Go: Al menos una variable debe ser nueva
         $alMenosUnaNueva = false;
         foreach ($this->ids as $id) {
-            // Asumimos que getVariable devuelve null si no existe
-            if ($entorno->getVariable($id) === null) {
+            // Regla de Go: la novedad se evalua contra el scope actual, no contra ancestros.
+            if (!array_key_exists($id, $entorno->ids)) {
                 $alMenosUnaNueva = true;
                 break;
             }
@@ -64,27 +94,31 @@ class DeclaracionCorta extends Instruction {
             return null;
         }
 
-       // 4. Ejecutar la declaración / asignación
+      // 5. Ejecutar la declaración / asignación
         for ($i = 0; $i < count($this->ids); $i++) {
             $nombreVar = $this->ids[$i];
-            $expresion = $this->valores[$i];
-
-            $resultadoEval = $expresion->ejecutar($entorno);
+            $resultadoEval = $valoresEvaluados[$i];
             $valorFinal = $resultadoEval->valor;
             $tipoInferido = $resultadoEval->tipo; // Inferencia automática de tipo
+            if ($valorFinal instanceof ValorArreglo) {
+                $tipoInferido = Tipo::ARREGLO;
+            }
 
-            // Usamos tu método guardarVariable
-            $entorno->guardarVariable(
-                $nombreVar, 
-                $valorFinal, 
-                $tipoInferido, 
-                $this->linea, 
-                $this->columna, 
-                false
-            ); 
+            if (array_key_exists($nombreVar, $entorno->ids)) {
+                $entorno->setVariable($nombreVar, $valorFinal);
+            } else {
+                $entorno->guardarVariable(
+                    $nombreVar,
+                    $valorFinal,
+                    $tipoInferido,
+                    $this->linea,
+                    $this->columna,
+                    false
+                );
+            }
             
             $valorImpreso = $this->formatearSalida($valorFinal);
-            Salida::$salidasConsola[] = "→ Declaración Corta: '{$nombreVar}' = {$valorImpreso} (Tipo Inferido: {$tipoInferido->name})";
+          //  Salida::$salidasConsola[] = "→ Declaración Corta: '{$nombreVar}' = {$valorImpreso} (Tipo Inferido: {$tipoInferido->name})";
         }
 
         return null;

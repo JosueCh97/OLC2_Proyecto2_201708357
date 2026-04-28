@@ -9,7 +9,7 @@ use App\Utilities\TipoExpresion;
 use App\Utilities\Salida;
 
 class AccesoID extends Expresion {
-    private string $id;
+    public string $id;
 
     public function __construct(int $linea, int $columna, string $id) {
         // Asegúrate de que ACCESO_ID exista en tu Enum de TipoExpresion

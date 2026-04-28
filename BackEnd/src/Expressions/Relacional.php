@@ -60,7 +60,7 @@ class Relacional extends Expresion {
         $strRes  = $resultado ? 'true' : 'false';
 
         // Imprimimos en el formato exacto que pediste
-        Salida::$salidasConsola[] = "📊 Comparación [Línea {$this->linea}]: {$strVal1} {$this->signo} {$strVal2} = {$strRes}";
+       // Salida::$salidasConsola[] = "📊 Comparación [Línea {$this->linea}]: {$strVal1} {$this->signo} {$strVal2} = {$strRes}";
 
         // Toda operación relacional devuelve siempre un BOOLEANO
         return new TipoRetorno($resultado, Tipo::BOOLEANO);
