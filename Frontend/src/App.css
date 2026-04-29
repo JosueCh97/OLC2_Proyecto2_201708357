@@ -172,6 +172,44 @@
   background: rgba(16, 24, 37, 0.88);
 }
 
+.icon-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 0.85rem;
+  color: #ecf5ff;
+  background: linear-gradient(180deg, rgba(17, 26, 39, 0.96), rgba(11, 17, 27, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.icon-action-btn:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--brand) 44%, white 10%);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+}
+
+.icon-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+  transform: none;
+  box-shadow: none;
+}
+
+.icon-action-btn svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
 .action-btn:disabled,
 .tab-btn:disabled {
   cursor: not-allowed;
@@ -205,6 +243,35 @@ summary:focus-visible {
 .action-primary:hover {
   border-color: color-mix(in srgb, var(--brand) 80%, white 20%);
   box-shadow: 0 18px 34px rgba(10, 58, 96, 0.42);
+}
+
+.compile-cta {
+  min-width: 11rem;
+  padding: 0.82rem 1.15rem;
+  border-width: 1px;
+  letter-spacing: 0.1em;
+  box-shadow:
+    0 16px 30px rgba(8, 58, 96, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.compile-cta:hover {
+  box-shadow:
+    0 20px 38px rgba(8, 58, 96, 0.44),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.compile-cta .kbd {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.45rem;
+  padding: 0.12rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: none;
 }
 
 .editor-area,
@@ -376,6 +443,164 @@ pre {
   color: #a3afbf;
 }
 
+/* ── Spinner (botón Compilar) ───────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 0.35em;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Insignia de estado de compilación ─────────────────── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.28rem 0.68rem;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border: 1px solid;
+  animation: rise-in 200ms ease both;
+}
+
+.status-ok {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.35);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.status-warn {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.status-err {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* ── Botón copiar ───────────────────────────────────────── */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #a8b4c5;
+  background: rgba(13, 19, 29, 0.85);
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+.copy-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
+  color: #d9e7f2;
+}
+
+.copy-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── Teclado inline ─────────────────────────────────────── */
+.kbd {
+  display: inline-block;
+  padding: 0.07em 0.38em;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom-width: 2px;
+  border-radius: 0.32em;
+  font-family: var(--font-mono);
+  font-size: 0.68em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.07);
+  vertical-align: middle;
+  margin-left: 0.3em;
+}
+
+.kbd-inline {
+  display: inline-block;
+  padding: 0.12em 0.5em;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom-width: 2px;
+  border-radius: 0.4em;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #d9e7f2;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* ── Tarjeta de stat (resumen general) ──────────────────── */
+.stat-card {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+/* ── ARM64 syntax hint (azul vs verde para comentarios) ── */
+.arm64-area {
+  tab-size: 8;
+}
+
+/* ── Placeholder de imagen ──────────────────────────────── */
+.img-placeholder {
+  margin: 0.5rem 0;
+}
+
+.img-placeholder-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 7rem;
+  border: 2px dashed rgba(42, 120, 183, 0.35);
+  border-radius: 0.75rem;
+  background: rgba(42, 120, 183, 0.04);
+  padding: 1.5rem;
+  color: #6b7f95;
+  font-size: 0.78rem;
+  text-align: center;
+  font-family: var(--font-ui);
+}
+
+.img-placeholder-box span:first-child {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+figcaption {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+  font-style: italic;
+}
+
+/* ── Animaciones de entrada ─────────────────────────────── */
 @keyframes rise-in {
   from {
     opacity: 0;

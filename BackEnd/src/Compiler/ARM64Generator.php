@@ -17,6 +17,7 @@ use App\Instructions\AsignacionPuntero;
 use App\Expressions\AccesoArreglo;
 use App\Expressions\ArregloLiteral;
 use App\Expressions\Casteo;
+use App\Expressions\Llamada;
 use App\Expressions\Referencia;
 use App\Expressions\Desreferencia;
 
@@ -88,8 +89,19 @@ class ARM64Generator
 
     /** Indica si el helper __print_float_raw debe emitirse */
     private bool $needsPrintFloat = false;
+    /** Indica si debemos emitir helper para imprimir <nil> */
+    private bool $needsPrintNil = false;
 
-    /** Mapa funcName → tipo de retorno primario ('ENTERO', 'DECIMAL', 'CADENA', etc.) */
+    /**
+     * Mapa funcName → metadata de retornos.
+     *
+     * Estructura:
+     *   [
+     *     'returns' => [ ['tipo' => 'ENTERO', 'dims' => [], 'slots' => 1], ... ],
+     *     'primary' => 'ENTERO',
+     *     'slots'   => 1,
+     *   ]
+     */
     private array $funcReturnTypes = [];
 
     /**
@@ -143,6 +155,7 @@ class ARM64Generator
         $this->needsStrlen     = false;
         $this->needsNow        = false;
         $this->needsPrintFloat = false;
+        $this->needsPrintNil   = false;
 
         // ── 1. Hoisting: separar Funcion del resto y construir tabla de retornos ─
         /** @var Funcion[] $funciones */
@@ -151,20 +164,40 @@ class ARM64Generator
         foreach ($instrucciones as $instr) {
             if ($instr instanceof Funcion) {
                 $funciones[$instr->nombre] = $instr;
-                // Registrar tipo de retorno primario + dimensiones si es arreglo
+                // Registrar lista completa de retornos y el tipo primario
                 $retTipos = $instr->tiposRetorno;
                 if (!empty($retTipos)) {
-                    $primero = $retTipos[0];
-                    if (is_array($primero) && isset($primero['tipoBase'])) {
-                        $tipo = $this->tipoFromDecl($primero['tipoBase']);
+                    $returns = [];
+                    foreach ($retTipos as $ret) {
+                        $tipo = 'ENTERO';
                         $dims = [];
-                        if (!empty($primero['dimensiones'])) {
-                            $dims = $this->extractDims($primero['dimensiones']);
+
+                        if (is_array($ret)) {
+                            $tipo = $this->tipoFromDecl($ret['tipoBase'] ?? null);
+                            if (!empty($ret['dimensiones'])) {
+                                $dims = $this->extractDims($ret['dimensiones']);
+                            }
+                        } elseif (is_object($ret)) {
+                            $tipo = $this->tipoFromDecl($ret->tipoBase ?? null);
+                            if (!empty($ret->dimensiones)) {
+                                $dims = $this->extractDims($ret->dimensiones);
+                            }
                         }
-                        $this->funcReturnTypes[$instr->nombre] = ['tipo' => $tipo, 'dims' => $dims];
-                    } elseif (is_object($primero)) {
-                        $tipo = $this->tipoFromDecl($primero->tipoBase ?? null);
-                        $this->funcReturnTypes[$instr->nombre] = ['tipo' => $tipo, 'dims' => []];
+
+                        $slots = $this->returnSlotsFromDescriptor($tipo, $dims);
+                        $returns[] = [
+                            'tipo'  => $tipo,
+                            'dims'  => $dims,
+                            'slots' => $slots,
+                        ];
+                    }
+
+                    if (!empty($returns)) {
+                        $this->funcReturnTypes[$instr->nombre] = [
+                            'returns' => $returns,
+                            'primary' => $returns[0]['tipo'],
+                            'slots'   => array_sum(array_map(static fn (array $ret): int => (int)($ret['slots'] ?? 1), $returns)),
+                        ];
                     }
                 }
             }
@@ -222,6 +255,7 @@ class ARM64Generator
         $this->emit('.align 3');
 
         // Constantes de runtime siempre presentes
+        $this->emit('msg_nil:      .asciz "<nil>"');
         $this->emit('__str_true:   .ascii "true"');
         $this->emit('__str_false:  .ascii "false"');
         $this->emit('__str_space:  .ascii " "');
@@ -367,7 +401,7 @@ class ARM64Generator
                 $val = $instr->valor;
                 if (is_object($val)) {
                     $vc = basename(str_replace('\\', '/', get_class($val)));
-                    if ($vc === 'Llamada' && $val->nombre === 'substr') {
+                    if ($val instanceof Llamada && $val->nombre === 'substr') {
                         return 2;
                     }
                 }
@@ -523,19 +557,63 @@ class ARM64Generator
     {
         // Caso 1a: arreglo  →  var arr [N]tipo  o  var arr [N]tipo = [N]tipo{...}
         if (is_string($instr->id) && !empty($instr->dimensionesExpr)) {
-            $dims  = $this->extractDims($instr->dimensionesExpr);
-            $total = max(1, (int)array_product($dims));
+            // Intentar extraer dimensiones en tiempo de compilación
+            $constDims = $this->extractDimsOrNull($instr->dimensionesExpr);
             $tipo  = $this->tipoFromDecl($instr->tipo);
-            $base  = $this->ctx->allocArray($instr->id, $dims, $tipo);
-            $this->emit("    # var {$instr->id} [{$this->dimsStr($dims)}]{$tipo} @ [x29, #{$base}] ({$total} slots)");
-            if ($instr->valor instanceof ArregloLiteral) {
-                $this->generarInicializarArregloLiteral($base, $dims, $instr->valor);
-            } else {
-                $this->emit('    mov     x0, #0             # arreglo → ceros');
-                for ($i = 0; $i < $total; $i++) {
-                    $off = $base + $i * 8;
-                    $this->emit("    str     x0, [x29, #{$off}]  # {$instr->id}[{$i}] = 0");
+
+            if ($constDims !== null) {
+                // Dimensiones constantes: reserva estática en el frame
+                $dims  = $constDims;
+                $total = max(1, (int)array_product($dims));
+                $base  = $this->ctx->allocArray($instr->id, $dims, $tipo);
+                $this->emit("    # var {$instr->id} [{$this->dimsStr($dims)}]{$tipo} @ [x29, #{$base}] ({$total} slots)");
+                if ($instr->valor instanceof ArregloLiteral) {
+                    $this->generarInicializarArregloLiteral($base, $dims, $instr->valor);
+                } else {
+                    $this->emit('    mov     x0, #0             # arreglo → ceros');
+                    for ($i = 0; $i < $total; $i++) {
+                        $off = $base + $i * 8;
+                        $this->emit("    str     x0, [x29, #{$off}]  # {$instr->id}[{$i}] = 0");
+                    }
                 }
+            } else {
+                // Dimensiones dinámicas: asignar región runtime en el stack y
+                // almacenar su puntero en una variable local (markPtrArray).
+                $dimCount = count($instr->dimensionesExpr);
+                $ptrSlot  = $this->ctx->allocVar($instr->id, $tipo); // slot para puntero
+                // Registrar como ptrArray con placeholders para el número de dimensiones
+                $this->ctx->markPtrArray($instr->id, array_fill(0, $dimCount, 1));
+
+                // Calcular producto runtime de dimensiones → x19
+                $this->emit('    mov     x19, #1              # producto dims runtime');
+                foreach ($instr->dimensionesExpr as $dexpr) {
+                    $this->generarExpresion($dexpr);   // → x0
+                    $this->emit('    mul     x19, x19, x0');
+                }
+
+                // bytes = slots * 8
+                $this->emit('    mov     x20, #8');
+                $this->emit('    mul     x19, x19, x20       # bytes a reservar');
+                // Alinear tamaño a 16 bytes para evitar fallas de bus
+                $this->emit('    add     x21, x19, #15');
+                $this->emit('    bic     x21, x21, #15      # x21 = align16(x19)');
+
+                // Elegir stack allocation (si pequeño) o malloc (si grande)
+                $lblMalloc = $this->ctx->newLabel('malloc_call');
+                $lblUseStack = $this->ctx->newLabel('use_stack');
+                $this->emit("    mov     x22, #4096");
+                $this->emit("    cmp     x21, x22");
+                $this->emit("    bge     {$lblMalloc}");
+                $this->emit("{$lblUseStack}:");
+                $this->emit('    sub     sp, sp, x21');
+                $this->emit('    mov     x0, sp');
+                $this->emit("    str     x0, [x29, #{$ptrSlot}]  # ptr dinámico {$instr->id} (stack)");
+                $this->emit("    b       __after_alloc_{$lblUseStack}");
+                $this->emit("{$lblMalloc}:");
+                $this->emit('    mov     x0, x21');
+                $this->emit('    bl      malloc');
+                $this->emit("    str     x0, [x29, #{$ptrSlot}]  # ptr dinámico {$instr->id} (heap)");
+                $this->emit("__after_alloc_{$lblUseStack}:");
             }
             return;
         }
@@ -576,22 +654,8 @@ class ARM64Generator
             if (is_object($instr->valor)) {
                 $claseVal = basename(str_replace('\\', '/', get_class($instr->valor)));
                 if ($claseVal === 'Llamada') {
-                    $this->generarLlamadaExpr($instr->valor);  // bl → x0..xN-1
-                    $n = count($ids);
-                    $slots = [];
-                    for ($i = 0; $i < $n; $i++) {
-                        $slot = $this->ctx->getScratchSaveOffset($this->scratchDepth + $i);
-                        $slots[] = $slot;
-                        $this->emit("    str     x{$i}, [x29, #{$slot}]  // ret[{$i}]");
-                    }
-                    $retInfo = $this->funcReturnTypes[$instr->valor->nombre] ?? ['tipo' => $tipoBase, 'dims' => []];
-                    $retTipo = is_array($retInfo) ? ($retInfo['tipo'] ?? $tipoBase) : $retInfo;
-                    for ($i = 0; $i < $n; $i++) {
-                        $tipo   = ($i === 0) ? $retTipo : 'ENTERO';
-                        $offset = $this->ctx->allocVar($ids[$i], $tipo);
-                        $this->emit("    ldr     x0, [x29, #{$slots[$i]}]  // ret[{$i}]");
-                        $this->emit("    str     x0, [x29, #{$offset}]  // {$ids[$i]}");
-                    }
+                    $this->generarLlamadaExpr($instr->valor);
+                    $this->emitRetornoMultipleHaciaIds($ids, $instr->valor->nombre, $tipoBase, false);
                     return;
                 }
             }
@@ -622,13 +686,13 @@ class ARM64Generator
             $valor    = $valores[0];
             $claseVal = basename(str_replace('\\', '/', get_class($valor)));
             if ($claseVal === 'Llamada') {
-                $retInfo = $this->funcReturnTypes[$valor->nombre] ?? ['tipo' => 'ENTERO', 'dims' => []];
-                $retDims = is_array($retInfo) ? ($retInfo['dims'] ?? []) : [];
-                $retTipo = is_array($retInfo) ? ($retInfo['tipo'] ?? 'ENTERO') : $retInfo;
+                $retInfo = $this->getFunctionReturnInfo($valor->nombre);
+                $retDims = $retInfo['returns'][0]['dims'] ?? [];
+                $retTipo = $retInfo['returns'][0]['tipo'] ?? 'ENTERO';
                 if (!empty($retDims)) {
                     // Función retorna arreglo: valores vienen en x0..xN-1
                     $this->generarLlamadaExpr($valor);
-                    $total  = max(1, (int)array_product($retDims));
+                    $total  = $this->returnSlotsFromDescriptor($retTipo, $retDims);
                     $base   = $this->ctx->allocArray($ids[0], $retDims, $retTipo);
                     $this->emit("    // {$ids[0]} := [{$this->dimsStr($retDims)}]{$retTipo} @ [x29, #{$base}]");
                     // Preservar los registros de retorno antes de que allocVar cambie el frame
@@ -650,24 +714,8 @@ class ARM64Generator
             $claseVal = basename(str_replace('\\', '/', get_class($valor)));
             if ($claseVal === 'Llamada') {
                 // Llamar a la función — los N valores quedan en x0..xN-1
-                $this->generarLlamadaExpr($valor);   // ya hace bl + restaura sp
-                // Preservar x0..xN-1 en scratch antes de que allocVar modifique el frame
-                $n = count($ids);
-                $slots = [];
-                for ($i = 0; $i < $n; $i++) {
-                    $slot = $this->ctx->getScratchSaveOffset($this->scratchDepth + $i);
-                    $slots[] = $slot;
-                    $this->emit("    str     x{$i}, [x29, #{$slot}]  // guardar ret[{$i}]");
-                }
-                // Ahora allocar variables y restaurar desde scratch
-                $retInfo = $this->funcReturnTypes[$valor->nombre] ?? ['tipo' => 'ENTERO', 'dims' => []];
-                $retTipo = is_array($retInfo) ? ($retInfo['tipo'] ?? 'ENTERO') : $retInfo;
-                for ($i = 0; $i < $n; $i++) {
-                    $tipo   = ($i === 0) ? $retTipo : 'ENTERO';
-                    $offset = $this->ctx->allocVar($ids[$i], $tipo);
-                    $this->emit("    ldr     x0, [x29, #{$slots[$i]}]  // ret[{$i}]");
-                    $this->emit("    str     x0, [x29, #{$offset}]  // {$ids[$i]}");
-                }
+                $this->generarLlamadaExpr($valor);
+                $this->emitRetornoMultipleHaciaIds($ids, $valor->nombre, 'ENTERO', true);
                 return;
             }
         }
@@ -712,25 +760,7 @@ class ARM64Generator
             $claseVal = basename(str_replace('\\', '/', get_class($valor)));
             if ($claseVal === 'Llamada') {
                 $this->generarLlamadaExpr($valor);   // bl → x0..xN-1
-                $n = count($ids);
-                $slots = [];
-                for ($i = 0; $i < $n; $i++) {
-                    $slot = $this->ctx->getScratchSaveOffset($this->scratchDepth + $i);
-                    $slots[] = $slot;
-                    $this->emit("    str     x{$i}, [x29, #{$slot}]  // ret[{$i}]");
-                }
-                $retInfo = $this->funcReturnTypes[$valor->nombre] ?? ['tipo' => 'ENTERO', 'dims' => []];
-                $retTipo = is_array($retInfo) ? ($retInfo['tipo'] ?? 'ENTERO') : $retInfo;
-                for ($i = 0; $i < $n; $i++) {
-                    $offset = $this->ctx->getVarOffset($ids[$i]);
-                    if ($offset === null) {
-                        // var declarada implícitamente (error-recovery del parser)
-                        $tipo   = ($i === 0) ? $retTipo : 'ENTERO';
-                        $offset = $this->ctx->allocVar($ids[$i], $tipo);
-                    }
-                    $this->emit("    ldr     x0, [x29, #{$slots[$i]}]  // ret[{$i}]");
-                    $this->emit("    str     x0, [x29, #{$offset}]  // {$ids[$i]}");
-                }
+                $this->emitRetornoMultipleHaciaIds($ids, $valor->nombre, 'ENTERO', false);
                 return;
             }
         }
@@ -984,16 +1014,28 @@ class ARM64Generator
             }
             $this->generarExpresion($expr);
         } else {
-            // Múltiple retorno: evaluar cada expresión, guardar en staging al vuelo
-            $n       = count($exprs);
-            $aligned = (int)(ceil($n * 8 / 16) * 16);
-            $this->emit("    sub     sp, sp, #{$aligned}    // staging retorno múltiple");
-            for ($i = 0; $i < $n; $i++) {
-                $this->generarExpresion($exprs[$i]);        // → x0
-                $this->emit("    str     x0, [sp, #" . ($i * 8) . "]  // ret[{$i}]");
+            // Múltiple retorno: reservar staging y preservar el ancho real de cada expresión.
+            $returnMeta = [];
+            $totalSlots = 0;
+            foreach ($exprs as $expr) {
+                $slots = $this->returnSlotsFromReturnExpression($expr);
+                $returnMeta[] = ['slots' => $slots];
+                $totalSlots += $slots;
             }
-            // Cargar en orden inverso para que x0 sea el primero
-            for ($i = $n - 1; $i >= 0; $i--) {
+
+            $aligned = (int)(ceil(max(1, $totalSlots) * 8 / 16) * 16);
+            $this->emit("    sub     sp, sp, #{$aligned}    // staging retorno múltiple");
+
+            $slotIndex = 0;
+            foreach ($exprs as $i => $expr) {
+                $slots = $returnMeta[$i]['slots'];
+                $this->generarExpresion($expr);
+                for ($j = 0; $j < $slots; $j++, $slotIndex++) {
+                    $this->emit("    str     x{$j}, [sp, #" . ($slotIndex * 8) . "]  // ret[{$slotIndex}]");
+                }
+            }
+
+            for ($i = 0; $i < $slotIndex; $i++) {
                 $this->emit("    ldr     x{$i}, [sp, #" . ($i * 8) . "]  // x{$i} ← ret[{$i}]");
             }
             $this->emit("    add     sp, sp, #{$aligned}    // liberar staging");
@@ -1090,8 +1132,8 @@ class ARM64Generator
         $this->emit("    bl      {$nombre}");
         $this->emit("    add     sp, sp, #{$argSpace}    // liberar staging");
 
-        $retInfo = $this->funcReturnTypes[$nombre] ?? ['tipo' => 'ENTERO', 'dims' => []];
-        return is_array($retInfo) ? $retInfo['tipo'] : $retInfo;
+        $retInfo = $this->getFunctionReturnInfo($nombre);
+        return $retInfo['primary'] ?? 'ENTERO';
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1265,86 +1307,18 @@ class ARM64Generator
         }
 
         $isPtrArr = $this->ctx->isPtrArray($nombre);
+        $dimsCalc = $isPtrArr ? ($this->ctx->getPtrArrayDims($nombre) ?? [1]) : ($dims ?? [1]);
 
-        if ($isPtrArr) {
-            // Parámetro puntero-a-arreglo: primero cargar el puntero base
-            $ptrDims = $this->ctx->getPtrArrayDims($nombre) ?? [1];
-            if (count($indices) === 1) {
-                $this->generarExpresion($indices[0]);          // i → x0
-                $this->emit('    lsl     x9, x0, #3             // i * 8');
-                $this->emit("    ldr     x10, [x29, #{$base}]   // cargar puntero {$nombre}");
-                $this->emit('    ldr     x0, [x10, x9]          // *ptr[i]');
-            } elseif (count($indices) === 2) {
-                $cols  = (int)($ptrDims[1] ?? 1);
-                $slotI = $this->ctx->getScratchSaveOffset($this->scratchDepth);
-                $this->scratchDepth++;
-                $this->generarExpresion($indices[0]);          // i → x0
-                $this->emit("    str     x0, [x29, #{$slotI}]  // save i");
-                $this->generarExpresion($indices[1]);          // j → x0
-                $this->emit("    ldr     x9, [x29, #{$slotI}]  // restore i");
-                $this->scratchDepth--;
-                $this->emit("    mov     x10, #{$cols}");
-                $this->emit('    mul     x9, x9, x10             // i * cols');
-                $this->emit('    add     x9, x9, x0              // i*cols + j');
-                $this->emit('    lsl     x9, x9, #3              // flat * 8');
-                $this->emit("    ldr     x10, [x29, #{$base}]   // cargar puntero {$nombre}");
-                $this->emit('    ldr     x0, [x10, x9]           // *ptr[i][j]');
-            } elseif (count($indices) === 3) {
-                // 3D: flat = k*(d1*d2) + i*d2 + j
-                $d1 = (int)($ptrDims[1] ?? 1);
-                $d2 = (int)($ptrDims[2] ?? 1);
-                $slotK = $this->ctx->getScratchSaveOffset($this->scratchDepth);
-                $slotI = $this->ctx->getScratchSaveOffset($this->scratchDepth + 1);
-                $this->scratchDepth += 2;
-                $this->generarExpresion($indices[0]);          // k → x0
-                $this->emit("    str     x0, [x29, #{$slotK}]  // save k");
-                $this->generarExpresion($indices[1]);          // i → x0
-                $this->emit("    str     x0, [x29, #{$slotI}]  // save i");
-                $this->generarExpresion($indices[2]);          // j → x0
-                // flat = k*(d1*d2) + i*d2 + j
-                $this->emit("    ldr     x9, [x29, #{$slotI}]  // restore i");
-                $this->emit("    mov     x10, #{$d2}");
-                $this->emit('    mul     x9, x9, x10             // i*d2');
-                $this->emit('    add     x9, x9, x0              // i*d2 + j');
-                $this->emit("    ldr     x11, [x29, #{$slotK}]  // restore k");
-                $this->emit("    mov     x10, #" . ($d1 * $d2));
-                $this->emit('    mul     x11, x11, x10            // k*(d1*d2)');
-                $this->emit('    add     x9, x11, x9             // flat');
-                $this->emit('    lsl     x9, x9, #3              // flat*8');
-                $this->scratchDepth -= 2;
-                $this->emit("    ldr     x10, [x29, #{$base}]   // cargar puntero {$nombre}");
-                $this->emit('    ldr     x0, [x10, x9]           // *ptr[k][i][j]');
-            } else {
-                $this->emit("    // [TODO] ptr arreglo con " . count($indices) . " dims");
-                $this->emit('    mov     x0, #0');
-            }
-        } elseif (count($indices) === 1) {
-            // 1D por valor
-            $this->generarExpresion($indices[0]);          // i → x0
-            $this->emit('    lsl     x9, x0, #3             // i * 8 (byte offset)');
-            $this->emit("    add     x10, x29, #{$base}      // &{$nombre}[0]");
-            $this->emit('    ldr     x0, [x10, x9]          // carga elemento');
-        } elseif (count($indices) === 2) {
-            // 2D  — necesitamos i y j; guardamos i en slot de scratch
-            $cols   = (int)($dims[1] ?? 1);
-            $slotI  = $this->ctx->getScratchSaveOffset($this->scratchDepth);
-            $this->scratchDepth++;
-
-            $this->generarExpresion($indices[0]);          // i → x0
-            $this->emit("    str     x0, [x29, #{$slotI}]  // save i");
-            $this->generarExpresion($indices[1]);          // j → x0
-            $this->emit("    ldr     x9, [x29, #{$slotI}]  // restore i");
-
-            $this->scratchDepth--;
-            $this->emit("    mov     x10, #{$cols}");
-            $this->emit('    mul     x9, x9, x10             // i * cols');
-            $this->emit('    add     x9, x9, x0              // i*cols + j');
-            $this->emit('    lsl     x9, x9, #3              // flat * 8');
-            $this->emit("    add     x10, x29, #{$base}");
-            $this->emit('    ldr     x0, [x10, x9]           // carga elemento 2D');
-        } else {
-            $this->emit("    // [TODO] acceso arreglo con " . count($indices) . " dimensiones");
+        if (count($indices) === 0) {
             $this->emit('    mov     x0, #0');
+        } else {
+            $this->emitirOffsetRowMajor($indices, $dimsCalc);
+            if ($isPtrArr) {
+                $this->emit("    ldr     x10, [x29, #{$base}]   // cargar puntero {$nombre}");
+            } else {
+                $this->emit("    add     x10, x29, #{$base}      // &{$nombre}[0]");
+            }
+            $this->emit('    ldr     x0, [x10, x9]           // carga elemento');
         }
 
         // Para CADENA: x0 = puntero, calcular longitud con __strlen_setx1
@@ -1381,68 +1355,17 @@ class ARM64Generator
         $isPtrArr = $this->ctx->isPtrArray($nombre);
         $ptrDims  = $isPtrArr ? ($this->ctx->getPtrArrayDims($nombre) ?? [1]) : ($dims ?? [1]);
 
-        if (count($indices) === 1) {
-            $this->generarExpresion($indices[0]);            // i → x0
-            $this->emit('    lsl     x9, x0, #3             // i * 8');
-            if ($isPtrArr) {
-                $this->emit("    ldr     x10, [x29, #{$base}]   // cargar puntero {$nombre}");
-            } else {
-                $this->emit("    add     x10, x29, #{$base}      // &{$nombre}[0]");
-            }
-            $this->emit("    ldr     x0, [x29, #{$slotVal}]  // reload value");
-            $this->emit('    str     x0, [x10, x9]           // arr[i] = val');
-        } elseif (count($indices) === 2) {
-            $cols  = (int)($ptrDims[1] ?? 1);
-            $slotI = $this->ctx->getScratchSaveOffset($this->scratchDepth);
-            $this->scratchDepth++;
-
-            $this->generarExpresion($indices[0]);            // i → x0
-            $this->emit("    str     x0, [x29, #{$slotI}]  // save i");
-            $this->generarExpresion($indices[1]);            // j → x0
-            $this->emit("    ldr     x9, [x29, #{$slotI}]  // restore i");
-
-            $this->scratchDepth--;
-            $this->emit("    mov     x10, #{$cols}");
-            $this->emit('    mul     x9, x9, x10             // i * cols');
-            $this->emit('    add     x9, x9, x0              // i*cols + j');
-            $this->emit('    lsl     x9, x9, #3              // flat * 8');
-            if ($isPtrArr) {
-                $this->emit("    ldr     x10, [x29, #{$base}]   // cargar puntero {$nombre}");
-            } else {
-                $this->emit("    add     x10, x29, #{$base}");
-            }
-            $this->emit("    ldr     x0, [x29, #{$slotVal}]  // reload value");
-            $this->emit('    str     x0, [x10, x9]           // m[i][j] = val');
-        } elseif (count($indices) === 3) {
-            $d1 = (int)($ptrDims[1] ?? 1);
-            $d2 = (int)($ptrDims[2] ?? 1);
-            $slotK = $this->ctx->getScratchSaveOffset($this->scratchDepth);
-            $slotI = $this->ctx->getScratchSaveOffset($this->scratchDepth + 1);
-            $this->scratchDepth += 2;
-            $this->generarExpresion($indices[0]);            // k → x0
-            $this->emit("    str     x0, [x29, #{$slotK}]  // save k");
-            $this->generarExpresion($indices[1]);            // i → x0
-            $this->emit("    str     x0, [x29, #{$slotI}]  // save i");
-            $this->generarExpresion($indices[2]);            // j → x0
-            $this->emit("    ldr     x9, [x29, #{$slotI}]  // restore i");
-            $this->emit("    mov     x10, #{$d2}");
-            $this->emit('    mul     x9, x9, x10             // i*d2');
-            $this->emit('    add     x9, x9, x0              // i*d2+j');
-            $this->emit("    ldr     x11, [x29, #{$slotK}]  // restore k");
-            $this->emit("    mov     x10, #" . ($d1 * $d2));
-            $this->emit('    mul     x11, x11, x10            // k*(d1*d2)');
-            $this->emit('    add     x9, x11, x9             // flat');
-            $this->emit('    lsl     x9, x9, #3              // flat*8');
-            $this->scratchDepth -= 2;
-            if ($isPtrArr) {
-                $this->emit("    ldr     x10, [x29, #{$base}]   // cargar puntero");
-            } else {
-                $this->emit("    add     x10, x29, #{$base}");
-            }
-            $this->emit("    ldr     x0, [x29, #{$slotVal}]  // reload value");
-            $this->emit('    str     x0, [x10, x9]           // arr3d[k][i][j] = val');
+        if (count($indices) === 0) {
+            $this->emit("    // [TODO] asignacion arreglo sin indices");
         } else {
-            $this->emit("    // [TODO] asignacion arreglo con " . count($indices) . " dimensiones");
+            $this->emitirOffsetRowMajor($indices, $ptrDims);
+            if ($isPtrArr) {
+                $this->emit("    ldr     x10, [x29, #{$base}]   // cargar puntero {$nombre}");
+            } else {
+                $this->emit("    add     x10, x29, #{$base}");
+            }
+            $this->emit("    ldr     x0, [x29, #{$slotVal}]  // reload value");
+            $this->emit('    str     x0, [x10, x9]           // asignacion elemento');
         }
 
         $this->scratchDepth--;
@@ -1510,14 +1433,61 @@ class ARM64Generator
     {
         $dims = [];
         foreach ($dimensionesExpr as $expr) {
-            $clase = basename(str_replace('\\', '/', get_class($expr)));
-            if ($clase === 'Primitivo' && ($expr->tipo->name ?? '') === 'ENTERO') {
-                $dims[] = max(1, (int)$expr->valor);
-            } else {
-                $dims[] = 16; // fallback conservador
-            }
+            $valorConst = $this->evaluarEnteroConstante($expr);
+            $dims[] = $valorConst !== null ? max(1, $valorConst) : 1;
         }
         return $dims ?: [1];
+    }
+
+    /**
+     * Intenta extraer dimensiones constantes; retorna null si alguna es dinámica.
+     */
+    private function extractDimsOrNull(array $dimensionesExpr): ?array
+    {
+        $dims = [];
+        foreach ($dimensionesExpr as $expr) {
+            $valorConst = $this->evaluarEnteroConstante($expr);
+            if ($valorConst === null) return null;
+            $dims[] = max(1, $valorConst);
+        }
+        return $dims ?: [1];
+    }
+
+    /**
+     * Evalúa una expresión entera constante usada en dimensiones de arreglos.
+     * Solo acepta literales y aritmética simple sobre literales.
+     */
+    private function evaluarEnteroConstante(object $expr): ?int
+    {
+        $clase = basename(str_replace('\\', '/', get_class($expr)));
+
+        if ($clase === 'Primitivo' && ($expr->tipo->name ?? '') === 'ENTERO') {
+            return (int)$expr->valor;
+        }
+
+        if ($clase === 'Aritmetico') {
+            $izq = $expr->exp1 !== null ? $this->evaluarEnteroConstante($expr->exp1) : null;
+            $der = $this->evaluarEnteroConstante($expr->exp2);
+
+            if ($expr->exp1 === null) {
+                return $der !== null ? -$der : null;
+            }
+
+            if ($izq === null || $der === null) {
+                return null;
+            }
+
+            return match ($expr->signo) {
+                '+' => $izq + $der,
+                '-' => $izq - $der,
+                '*' => $izq * $der,
+                '/' => $der !== 0 ? intdiv($izq, $der) : null,
+                '%' => $der !== 0 ? ($izq % $der) : null,
+                default => null,
+            };
+        }
+
+        return null;
     }
 
     /** Producto de dimensiones para el pre-scan de variables. */
@@ -1530,6 +1500,190 @@ class ARM64Generator
     private function dimsStr(array $dims): string
     {
         return implode('][', $dims);
+    }
+
+    /** Devuelve metadata de retorno para una función, con valores por defecto. */
+    private function getFunctionReturnInfo(string $nombre): array
+    {
+        if (!isset($this->funcReturnTypes[$nombre])) {
+            return [
+                'returns' => [[
+                    'tipo'  => 'ENTERO',
+                    'dims'  => [],
+                    'slots' => 1,
+                ]],
+                'primary' => 'ENTERO',
+                'slots'   => 1,
+            ];
+        }
+
+        $info = $this->funcReturnTypes[$nombre];
+        if (isset($info['returns']) && is_array($info['returns'])) {
+            return $info;
+        }
+
+        $tipo = $info['tipo'] ?? 'ENTERO';
+        $dims = $info['dims'] ?? [];
+        $slots = $this->returnSlotsFromDescriptor($tipo, $dims);
+        return [
+            'returns' => [[
+                'tipo'  => $tipo,
+                'dims'  => $dims,
+                'slots' => $slots,
+            ]],
+            'primary' => $tipo,
+            'slots'   => $slots,
+        ];
+    }
+
+    /** Devuelve la lista de descriptores de retorno para una función. */
+    private function getFunctionReturnDescriptors(string $nombre): array
+    {
+        return $this->getFunctionReturnInfo($nombre)['returns'] ?? [];
+    }
+
+    /**
+     * Calcula el ancho de un valor de retorno en registros ARM64.
+     * CADENA ocupa 2 (ptr + len); los arreglos ocupan el producto de sus dimensiones.
+     */
+    private function returnSlotsFromDescriptor(string $tipo, array $dims = []): int
+    {
+        if ($tipo === 'CADENA') {
+            return 2;
+        }
+
+        if (!empty($dims)) {
+            return max(1, (int)array_product($dims));
+        }
+
+        return 1;
+    }
+
+    /**
+     * Infiere cuántos registros ocupa una expresión al retornar.
+     * Se usa en `return a, b, ...` para guardar/restaurar el tuple completo.
+     */
+    private function returnSlotsFromReturnExpression(object $expr): int
+    {
+        $clase = basename(str_replace('\\', '/', get_class($expr)));
+
+        if ($clase === 'Llamada') {
+            $retInfo = $this->getFunctionReturnInfo($expr->nombre);
+            return (int)($retInfo['slots'] ?? 1);
+        }
+
+        if ($clase === 'AccesoID') {
+            $dims = $this->ctx->getArrayDims($expr->id);
+            if ($dims !== null && !empty($dims)) {
+                return max(1, (int)array_product($dims));
+            }
+
+            if ($this->ctx->getVarType($expr->id) === 'CADENA') {
+                return 2;
+            }
+        }
+
+        if ($clase === 'Primitivo' && ($expr->tipo->name ?? '') === 'CADENA') {
+            return 2;
+        }
+
+        return 1;
+    }
+
+    /**
+     * Emite x9 = offset en bytes para un acceso row-major de N dimensiones.
+     * Deja el índice evaluado en slots temporales del frame para sobrevivir a BL.
+     */
+    private function emitirOffsetRowMajor(array $indices, array $dims): void
+    {
+        $count = count($indices);
+        if ($count === 0) {
+            $this->emit('    mov     x9, #0');
+            return;
+        }
+
+        $baseDepth = $this->scratchDepth;
+        $this->scratchDepth += $count;
+
+        $slotOffsets = [];
+        for ($i = 0; $i < $count; $i++) {
+            $slotOffsets[$i] = $this->ctx->getScratchSaveOffset($baseDepth + $i);
+            $this->generarExpresion($indices[$i]);
+            $this->emit("    str     x0, [x29, #{$slotOffsets[$i]}]  // idx[{$i}]");
+        }
+
+        $this->emit('    mov     x9, #0');
+        $dimCount = count($dims);
+        for ($i = 0; $i < $count; $i++) {
+            $factor = 1;
+            for ($j = $i + 1; $j < $dimCount; $j++) {
+                $factor *= max(1, (int)($dims[$j] ?? 1));
+            }
+
+            $this->emit("    ldr     x10, [x29, #{$slotOffsets[$i]}]  // idx[{$i}]");
+            if ($factor !== 1) {
+                $this->emit("    mov     x11, #{$factor}");
+                $this->emit('    mul     x10, x10, x11             // idx * factor');
+            }
+            $this->emit('    add     x9, x9, x10              // acumulado row-major');
+        }
+
+        $this->scratchDepth = $baseDepth;
+        $this->emit('    lsl     x9, x9, #3              // bytes = idx * 8');
+    }
+
+    /**
+     * Guarda los registros de retorno de una llamada en los IDs destino.
+     * Si un retorno es string, solo persiste el puntero en la variable.
+     */
+    private function emitRetornoMultipleHaciaIds(array $ids, string $funcName, string $fallbackTipo, bool $allowAllocateMissing): void
+    {
+        $retInfo = $this->getFunctionReturnInfo($funcName);
+        $returns = $retInfo['returns'] ?? [];
+        $totalSlots = max(1, (int)($retInfo['slots'] ?? 1));
+        $aligned = (int)(ceil($totalSlots * 8 / 16) * 16);
+        $this->emit("    sub     sp, sp, #{$aligned}    // staging retorno múltiple");
+
+        for ($i = 0; $i < $totalSlots; $i++) {
+            if ($i >= 8) {
+                break;
+            }
+            $this->emit("    str     x{$i}, [sp, #" . ($i * 8) . "]  // save ret[{$i}]");
+        }
+
+        $srcIndex = 0;
+        foreach ($ids as $i => $nombre) {
+            $desc = $returns[$i] ?? ['tipo' => $fallbackTipo, 'dims' => [], 'slots' => 1];
+            $tipo = $desc['tipo'] ?? $fallbackTipo;
+            $dims = $desc['dims'] ?? [];
+            $slots = max(1, (int)($desc['slots'] ?? 1));
+
+            $offset = $this->ctx->getVarOffset($nombre);
+            if ($offset === null && $allowAllocateMissing) {
+                if (!empty($dims)) {
+                    $offset = $this->ctx->allocArray($nombre, $dims, $tipo);
+                } else {
+                    $offset = $this->ctx->allocVar($nombre, $tipo);
+                }
+            } elseif ($offset === null) {
+                $offset = $this->ctx->allocVar($nombre, $tipo);
+            }
+
+            if (!empty($dims)) {
+                $baseOffset = $offset;
+                for ($j = 0; $j < $slots && ($srcIndex + $j) < $totalSlots; $j++) {
+                    $this->emit("    ldr     x0, [sp, #" . (($srcIndex + $j) * 8) . "]  // ret[" . ($srcIndex + $j) . "]");
+                    $this->emit("    str     x0, [x29, #" . ($baseOffset + ($j * 8)) . "]  // {$nombre}[{$j}]");
+                }
+            } else {
+                $this->emit("    ldr     x0, [sp, #" . ($srcIndex * 8) . "]  // ret[{$srcIndex}]");
+                $this->emit("    str     x0, [x29, #{$offset}]  // {$nombre}");
+            }
+
+            $srcIndex += $slots;
+        }
+
+        $this->emit("    add     sp, sp, #{$aligned}    // liberar staging");
     }
 
     /**
@@ -1598,14 +1752,38 @@ class ARM64Generator
             $expr = $exprs[$i];
             $tipo = $this->generarExpresion($expr);
 
+            $claseExpr = is_object($expr) ? basename(str_replace('\\', '/', get_class($expr))) : '';
+
             switch ($tipo) {
                 case 'CADENA':
                     // x0 = ptr, x1 = len  →  write(1, ptr, len)
+                    // nil se resuelve justo antes de preparar la syscall.
+                    $lblReal = $this->ctx->newLabel('print_real');
+                    $lblWrite = $this->ctx->newLabel('print_write');
+                    $this->emit('    cmp     x0, #0');
+                    $this->emit('    b.ne    ' . $lblReal);
+                    $this->emit('    adrp    x1, msg_nil');
+                    $this->emit('    add     x1, x1, :lo12:msg_nil');
+                    $this->emit('    mov     x2, #5');
+                    $this->emit('    b       ' . $lblWrite);
+                    $this->emit($lblReal . ':');
                     $this->emit('    mov     x2, x1          # longitud');
                     $this->emit('    mov     x1, x0          # puntero');
+                    $this->emit($lblWrite . ':');
                     $this->emit('    mov     x0, #1          # stdout');
                     $this->emit('    mov     x8, #64         # syscall write');
                     $this->emit('    svc     #0');
+                    $this->needsPrintNil = true;
+                    break;
+
+                case 'NIL':
+                    $this->emit('    adrp    x1, msg_nil');
+                    $this->emit('    add     x1, x1, :lo12:msg_nil');
+                    $this->emit('    mov     x2, #5          # len("<nil>")');
+                    $this->emit('    mov     x0, #1          # stdout');
+                    $this->emit('    mov     x8, #64         # syscall write');
+                    $this->emit('    svc     #0');
+                    $this->needsPrintNil = true;
                     break;
 
                 case 'ENTERO':
@@ -1786,6 +1964,10 @@ class ARM64Generator
                 $this->emit("    add     x0, x0, :lo12:{$label}");
                 $this->emit("    mov     x1, #{$len}         # longitud cadena");
                 return 'CADENA';
+
+            case 'NIL':
+                $this->emit('    mov     x0, #0');
+                return 'NIL';
 
             default:
                 $this->emit('    mov     x0, #0');
@@ -2032,26 +2214,32 @@ class ARM64Generator
             return 'BOOLEANO';
         }
 
-        // AND / OR binario
-        $slot = $this->ctx->getScratchSaveOffset($this->scratchDepth);
-        $this->scratchDepth++;
+        // AND / OR binario con cortocircuito real
+        $labelFalse = $this->ctx->newLabel($signo === '&&' ? 'and_false' : 'or_false');
+        $labelTrue  = $this->ctx->newLabel($signo === '&&' ? 'and_true' : 'or_true');
+        $labelEnd   = $this->ctx->newLabel($signo === '&&' ? 'and_end' : 'or_end');
 
         $this->generarExpresion($expr->exp1);
         $this->emit('    cmp     x0, #0');
-        $this->emit('    cset    x0, ne               # normalizar left');
-        $this->emit("    str     x0, [x29, #{$slot}]  # left → slot");
-
-        $this->generarExpresion($expr->exp2);
-        $this->emit('    cmp     x0, #0');
-        $this->emit('    cset    x0, ne               # normalizar right');
-
-        $this->scratchDepth--;
-        $this->emit("    ldr     x9, [x29, #{$slot}]  # x9 ← left");
 
         if ($signo === '&&') {
-            $this->emit('    and     x0, x9, x0       # &&');
+            $this->emit("    beq     {$labelFalse}      // left == false → short-circuit");
+            $this->generarExpresion($expr->exp2);
+            $this->emit('    cmp     x0, #0');
+            $this->emit('    cset    x0, ne              // right != 0');
+            $this->emit("    b       {$labelEnd}");
+            $this->emit("{$labelFalse}:");
+            $this->emit('    mov     x0, #0');
+            $this->emit("{$labelEnd}:");
         } else {
-            $this->emit('    orr     x0, x9, x0       # ||');
+            $this->emit("    bne     {$labelTrue}       // left != false → short-circuit");
+            $this->generarExpresion($expr->exp2);
+            $this->emit('    cmp     x0, #0');
+            $this->emit('    cset    x0, ne              // right != 0');
+            $this->emit("    b       {$labelEnd}");
+            $this->emit("{$labelTrue}:");
+            $this->emit('    mov     x0, #1');
+            $this->emit("{$labelEnd}:");
         }
 
         return 'BOOLEANO';
@@ -2155,6 +2343,21 @@ class ARM64Generator
             $this->emitBlank();
         }
 
+        // ── __print_nil ────────────────────────────────────────────────────
+        if ($this->needsPrintNil) {
+            $this->emitBlank();
+            $this->emit('# ── __print_nil : escribe msg_nil sin newline ──');
+            $this->emit('__print_nil:');
+            $this->emit('    adrp    x1, msg_nil');
+            $this->emit('    add     x1, x1, :lo12:msg_nil');
+            $this->emit('    mov     x2, #5              # len("<nil>")');
+            $this->emit('    mov     x0, #1              # stdout');
+            $this->emit('    mov     x8, #64');
+            $this->emit('    svc     #0');
+            $this->emit('    ret');
+            $this->emitBlank();
+        }
+
         // ── __print_float_raw ─────────────────────────────────────────────────
         // Entrada : x0 = float64 bits (IEEE 754 double)
         // Efecto  : imprime representación decimal mínima (estilo Go %g)
@@ -2162,6 +2365,7 @@ class ARM64Generator
         if ($this->needsPrintFloat) {
             $this->emitBlank();
             $this->emit('// ── __print_float_raw : x0=f64bits → decimal en stdout ──');
+            $this->emit('// Stack: [sp+0/8]=x29/x30  [sp+16]=char  [sp+24]=sign  [sp+32]=intpart  [sp+40]=frac  [sp+48..56]=9digbuf');
             $this->emit('__print_float_raw:');
             $this->emit('    sub     sp,  sp,  #80');
             $this->emit('    stp     x29, x30, [sp, #0]');
@@ -2179,10 +2383,35 @@ class ARM64Generator
             $this->emit('    svc     #0');
             $this->emit('    b       __pf_done');
             $this->emit('__pf_nonzero:');
-            // Negativo
+            // Guardar signo, luego trabajar con valor absoluto
             $this->emit('    fmov    x9, d0');
-            $this->emit('    lsr     x10, x9, #63        // bit signo');
-            $this->emit('    cbz     x10, __pf_pos');
+            $this->emit('    lsr     x9, x9, #63         // 1 si negativo');
+            $this->emit('    str     x9, [sp, #24]       // guardar signo');
+            $this->emit('    cbz     x9, __pf_abs');
+            $this->emit('    fneg    d0, d0              // abs');
+            $this->emit('__pf_abs:');
+            // Separar parte entera y fraccionaria
+            $this->emit('    frintz  d1, d0              // d1 = trunc(d0)');
+            $this->emit('    fcvtzs  x10, d1             // x10 = parte entera');
+            $this->emit('    fsub    d2, d0, d1          // d2 = fracción');
+            $this->emit('    str     x10, [sp, #32]      // salvar entero (emitFloat64Const clobbers x0)');
+            // Calcular dígitos fraccionarios
+            $this->emitFloat64Const(1000000000.0);
+            $this->emit('    fmov    d3, x0              // d3 = 1e9');
+            $this->emit('    fmul    d4, d2, d3          // d4 = frac * 1e9');
+            $this->emit('    fcvtas  x13, d4             // x13 = round(frac*1e9)');
+            $this->emitMovImmReg('x12', 1000000000);
+            $this->emit('    cmp     x13, x12');
+            $this->emit('    b.ne    __pf_frac_ok');
+            $this->emit('    ldr     x10, [sp, #32]');
+            $this->emit('    add     x10, x10, #1        // carry: entero += 1');
+            $this->emit('    str     x10, [sp, #32]');
+            $this->emit('    mov     x13, #0             // fraccion = 0');
+            $this->emit('__pf_frac_ok:');
+            $this->emit('    str     x13, [sp, #40]      // guardar fraccion');
+            // Imprimir signo si negativo
+            $this->emit('    ldr     x9, [sp, #24]');
+            $this->emit('    cbz     x9, __pf_print_int');
             $this->emit('    mov     w9, #45             // ASCII \'-\'');
             $this->emit('    strb    w9, [sp, #16]');
             $this->emit('    mov     x0, #1');
@@ -2190,21 +2419,14 @@ class ARM64Generator
             $this->emit('    mov     x2, #1');
             $this->emit('    mov     x8, #64');
             $this->emit('    svc     #0');
-            $this->emit('    fneg    d0, d0              // abs');
-            $this->emit('__pf_pos:');
-            // Separar parte entera y fraccionaria
-            $this->emit('    frintz  d1, d0              // d1 = trunc(d0)');
-            $this->emit('    fcvtzs  x10, d0             // x10 = int part');
-            $this->emit('    fsub    d2, d0, d1          // d2 = frac part');
-            // Imprimir parte entera
-            $this->emit('    mov     x0, x10');
-            $this->emit('    str     d2, [sp, #24]       // salvar frac');
+            $this->emit('__pf_print_int:');
+            // Imprimir parte entera primero
+            $this->emit('    ldr     x0, [sp, #32]');
             $this->emit('    bl      __print_int_raw');
-            $this->emit('    ldr     d2, [sp, #24]       // restaurar frac');
-            // Verificar fracción
-            $this->emit('    fcmp    d2, #0.0');
-            $this->emit('    beq     __pf_done');
-            // Imprimir '.'
+            // Si fraccion == 0, terminamos
+            $this->emit('    ldr     x13, [sp, #40]');
+            $this->emit('    cbz     x13, __pf_done');
+            // Imprimir '.' (una sola vez, entre entero y fracción)
             $this->emit('    mov     w9, #46             // ASCII \'.\'');
             $this->emit('    strb    w9, [sp, #16]');
             $this->emit('    mov     x0, #1');
@@ -2212,35 +2434,29 @@ class ARM64Generator
             $this->emit('    mov     x2, #1');
             $this->emit('    mov     x8, #64');
             $this->emit('    svc     #0');
-            // Generar dígitos fraccionarios
-            $this->emit('    add     x11, sp, #32        // buffer dígitos (8 bytes)');
-            $this->emit('    mov     x12, #0             // contador');
-            // Cargar 10.0 como double: 0x4024000000000000
-            $this->emit('    movz    x9,  #0');
-            $this->emit('    movk    x9,  #0x4024, lsl #48');
-            $this->emit('    fmov    d3, x9              // d3 = 10.0');
-            $this->emit('__pf_digit:');
-            $this->emit('    cmp     x12, #7');
-            $this->emit('    bge     __pf_trim');
-            $this->emit('    fmul    d2, d2, d3          // d2 *= 10');
-            $this->emit('    frintz  d4, d2              // d4 = trunc(d2)');
-            $this->emit('    fcvtzs  x13, d4             // x13 = digit');
-            $this->emit('    fsub    d2, d2, d4          // d2 -= digit');
-            $this->emit('    add     x13, x13, #48       // ASCII');
-            $this->emit('    strb    w13, [x11, x12]');
-            $this->emit('    add     x12, x12, #1');
-            $this->emit('    fcmp    d2, #0.0');
-            $this->emit('    bne     __pf_digit');
-            $this->emit('__pf_trim:');
-            $this->emit('    cbz     x12, __pf_done');
-            $this->emit('    sub     x13, x12, #1');
-            $this->emit('    ldrb    w14, [x11, x13]');
-            $this->emit('    cmp     w14, #48            // \'0\'?');
-            $this->emit('    bne     __pf_write');
+            // Generar dígitos fraccionarios en buffer [sp+48..56]
+            $this->emit('    add     x11, sp, #48        // buffer 9 bytes');
+            $this->emit('    mov     x12, #9');
+            $this->emit('__pf_digit_loop:');
+            $this->emit('    mov     x14, x13');
+            $this->emit('    mov     x15, #10');
+            $this->emit('    udiv    x13, x13, x15');
+            $this->emit('    msub    x14, x13, x15, x14');
+            $this->emit('    add     x14, x14, #48');
+            $this->emit('    subs    x12, x12, #1');
+            $this->emit('    strb    w14, [x11, x12]');
+            $this->emit('    b.ne    __pf_digit_loop');
+            $this->emit('    mov     x12, #9');
+            $this->emit('__pf_trim_loop:');
+            $this->emit('    cmp     x12, #1');
+            $this->emit('    ble     __pf_trim_done');
+            $this->emit('    sub     x14, x12, #1');
+            $this->emit('    ldrb    w15, [x11, x14]');
+            $this->emit('    cmp     w15, #48');
+            $this->emit('    b.ne    __pf_trim_done');
             $this->emit('    sub     x12, x12, #1');
-            $this->emit('    b       __pf_trim');
-            $this->emit('__pf_write:');
-            $this->emit('    cbz     x12, __pf_done');
+            $this->emit('    b       __pf_trim_loop');
+            $this->emit('__pf_trim_done:');
             $this->emit('    mov     x0, #1');
             $this->emit('    mov     x1, x11');
             $this->emit('    mov     x2, x12');
@@ -2274,65 +2490,251 @@ class ARM64Generator
 
         // ── __now ─────────────────────────────────────────────────────────────
         // Obtiene segundos Unix con clock_gettime(CLOCK_REALTIME) y los
-        // convierte a cadena ASCII decimal en __now_buf.
-        // Salida : x0 = puntero al primer dígito, x1 = longitud
+        // convierte a cadena ASCII con formato YYYY-MM-DD HH:MM:SS.
+        // Salida : x0 = puntero al primer carácter, x1 = longitud (= 19)
         if ($this->needsNow) {
             $this->emitBlank();
-            $this->emit('# ── __now : () → x0=ptr timestamp, x1=len ───────────────');
+            $this->emit('# ── __now : () → x0=ptr fecha, x1=len ──────────────────');
             $this->emit('__now:');
-            $this->emit('    sub     sp,  sp,  #64');
+            $this->emit('    sub     sp,  sp,  #96');
             $this->emit('    stp     x29, x30, [sp, #0]');
             $this->emit('    mov     x29, sp');
             $this->emitBlank();
-            $this->emit('    # clock_gettime(CLOCK_REALTIME=0, &timespec @ [sp+48])');
-            $this->emit('    mov     x0,  #0');
-            $this->emit('    add     x1,  sp,  #48        # timespec buffer (16 bytes)');
-            $this->emit('    mov     x8,  #113             # sys_clock_gettime');
-            $this->emit('    svc     #0');
+
+            $fixedNow = getenv('GOLAMPI_TEST_NOW_SEC');
+            if ($fixedNow !== false && is_numeric($fixedNow)) {
+                $this->emit('    // now() test override via GOLAMPI_TEST_NOW_SEC');
+                $this->emitMovImmReg('x9', (int)$fixedNow);
+            } else {
+                $this->emit('    # clock_gettime(CLOCK_REALTIME=0, &timespec @ [sp+48])');
+                $this->emit('    mov     x0,  #0');
+                $this->emit('    add     x1,  sp,  #48        # timespec buffer (16 bytes)');
+                $this->emit('    mov     x8,  #113             # sys_clock_gettime');
+                $this->emit('    svc     #0');
+                $this->emit('    ldr     x9,  [sp, #48]       # tv_sec (unix timestamp)');
+            }
+
             $this->emitBlank();
-            $this->emit('    ldr     x9,  [sp, #48]       # tv_sec (unix timestamp)');
+            $this->emit('    // x9 = seconds desde epoch; x10..x18 son temporales');
+            $this->emitMovImmReg('x10', 86400);
+            $this->emit('    udiv    x11, x9, x10         # x11 = days since epoch');
+            $this->emit('    msub    x12, x11, x10, x9    # x12 = seconds within day');
+            $this->emitMovImmReg('x13', 3600);
+            $this->emit('    udiv    x14, x12, x13        # x14 = hour');
+            $this->emit('    msub    x15, x14, x13, x12   # x15 = seconds remaining');
+            $this->emitMovImmReg('x16', 60);
+            $this->emit('    udiv    x17, x15, x16        # x17 = minute');
+            $this->emit('    msub    x18, x17, x16, x15   # x18 = second');
+            $this->emit('    mov     x3,  x14             # hora');
+            $this->emit('    mov     x4,  x17             # minuto');
+            $this->emit('    mov     x5,  x18             # segundo');
+
             $this->emitBlank();
-            $this->emit('    # Convertir x9 a decimal ASCII en __now_buf (desde el final)');
+            $this->emit('    // convertir days restantes a año/mes/día por acumulación');
+            $this->emit('    mov     x10, x11            # days restantes');
+            $this->emit('    mov     x14, #1970          # year');
+            $this->emit('__now_year_loop:');
+            $this->emit('    mov     x15, #365          # yearDays base');
+            $this->emit('    mov     x16, #4');
+            $this->emit('    udiv    x17, x14, x16');
+            $this->emit('    msub    x17, x17, x16, x14   # year % 4');
+            $this->emit('    cbnz    x17, __now_year_check_done');
+            $this->emit('    mov     x16, #100');
+            $this->emit('    udiv    x17, x14, x16');
+            $this->emit('    msub    x17, x17, x16, x14   # year % 100');
+            $this->emit('    cbnz    x17, __now_year_leap');
+            $this->emit('    mov     x16, #400');
+            $this->emit('    udiv    x17, x14, x16');
+            $this->emit('    msub    x17, x17, x16, x14   # year % 400');
+            $this->emit('    cbz     x17, __now_year_leap');
+            $this->emit('    b       __now_year_check_done');
+            $this->emit('__now_year_leap:');
+            $this->emit('    mov     x15, #366');
+            $this->emit('__now_year_check_done:');
+            $this->emit('    cmp     x10, x15');
+            $this->emit('    blt     __now_year_done');
+            $this->emit('    sub     x10, x10, x15');
+            $this->emit('    add     x14, x14, #1');
+            $this->emit('    b       __now_year_loop');
+            $this->emit('__now_year_done:');
+            $this->emit('    mov     x15, #0            # leap flag');
+            $this->emit('    mov     x16, #4');
+            $this->emit('    udiv    x17, x14, x16');
+            $this->emit('    msub    x17, x17, x16, x14   # year % 4');
+            $this->emit('    cbnz    x17, __now_month_init');
+            $this->emit('    mov     x16, #100');
+            $this->emit('    udiv    x17, x14, x16');
+            $this->emit('    msub    x17, x17, x16, x14   # year % 100');
+            $this->emit('    cbnz    x17, __now_leap_true');
+            $this->emit('    mov     x16, #400');
+            $this->emit('    udiv    x17, x14, x16');
+            $this->emit('    msub    x17, x17, x16, x14   # year % 400');
+            $this->emit('    cbnz    x17, __now_month_init');
+            $this->emit('__now_leap_true:');
+            $this->emit('    mov     x15, #1');
+            $this->emit('__now_month_init:');
+            $this->emit('    mov     x17, #1            # month');
+            $this->emit('__now_month_loop:');
+            $this->emit('    cmp     x17, #1');
+            $this->emit('    beq     __now_month_len_1');
+            $this->emit('    cmp     x17, #2');
+            $this->emit('    beq     __now_month_len_2');
+            $this->emit('    cmp     x17, #3');
+            $this->emit('    beq     __now_month_len_3');
+            $this->emit('    cmp     x17, #4');
+            $this->emit('    beq     __now_month_len_4');
+            $this->emit('    cmp     x17, #5');
+            $this->emit('    beq     __now_month_len_5');
+            $this->emit('    cmp     x17, #6');
+            $this->emit('    beq     __now_month_len_6');
+            $this->emit('    cmp     x17, #7');
+            $this->emit('    beq     __now_month_len_7');
+            $this->emit('    cmp     x17, #8');
+            $this->emit('    beq     __now_month_len_8');
+            $this->emit('    cmp     x17, #9');
+            $this->emit('    beq     __now_month_len_9');
+            $this->emit('    cmp     x17, #10');
+            $this->emit('    beq     __now_month_len_10');
+            $this->emit('    cmp     x17, #11');
+            $this->emit('    beq     __now_month_len_11');
+            $this->emit('    mov     x18, #31');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_1:');
+            $this->emit('    mov     x18, #31');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_2:');
+            $this->emit('    mov     x18, #28');
+            $this->emit('    add     x18, x18, x15');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_3:');
+            $this->emit('    mov     x18, #31');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_4:');
+            $this->emit('    mov     x18, #30');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_5:');
+            $this->emit('    mov     x18, #31');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_6:');
+            $this->emit('    mov     x18, #30');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_7:');
+            $this->emit('    mov     x18, #31');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_8:');
+            $this->emit('    mov     x18, #31');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_9:');
+            $this->emit('    mov     x18, #30');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_10:');
+            $this->emit('    mov     x18, #31');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_11:');
+            $this->emit('    mov     x18, #30');
+            $this->emit('    b       __now_month_len_done');
+            $this->emit('__now_month_len_done:');
+            $this->emit('    cmp     x10, x18');
+            $this->emit('    blt     __now_day_done');
+            $this->emit('    sub     x10, x10, x18');
+            $this->emit('    add     x17, x17, #1');
+            $this->emit('    b       __now_month_loop');
+            $this->emit('__now_day_done:');
+            $this->emit('    add     x18, x10, #1       # day');
+
+            $this->emitBlank();
+            $this->emit('    // Formatear buffer YYYY-MM-DD HH:MM:SS');
+            $this->emit('    // x14 = year, x17 = month, x18 = day, x3/hour, x4/min, x5/sec');
             $this->emit('    adrp    x10, __now_buf');
             $this->emit('    add     x10, x10, :lo12:__now_buf');
-            $this->emit('    add     x10, x10, #19        # puntero al byte 19 (final del buffer)');
-            $this->emit('    mov     x11, #0              # contador de dígitos');
-            $this->emitBlank();
-            $this->emit('    cbnz    x9,  __now_digits');
-            $this->emit('    # Caso especial: timestamp == 0');
-            $this->emit('    mov     w12, #48');
-            $this->emit('    sub     x10, x10, #1');
-            $this->emit('    strb    w12, [x10]');
-            $this->emit('    mov     x11, #1');
-            $this->emit('    b       __now_done');
-            $this->emitBlank();
-            $this->emit('__now_digits:');
-            $this->emit('    cbz     x9,  __now_done');
+
+            // Year (x14) → [0..3]
+            $this->emit('    mov     x12, #1000');
+            $this->emit('    udiv    x11, x14, x12');
+            $this->emit('    msub    x9, x11, x12, x14');
+            $this->emit('    add     x11, x11, #48');
+            $this->emit('    strb    w11, [x10, #0]');
+            $this->emit('    mov     x14, x9');
+            $this->emit('    mov     x12, #100');
+            $this->emit('    udiv    x11, x14, x12');
+            $this->emit('    msub    x9, x11, x12, x14');
+            $this->emit('    add     x11, x11, #48');
+            $this->emit('    strb    w11, [x10, #1]');
+            $this->emit('    mov     x14, x9');
             $this->emit('    mov     x12, #10');
-            $this->emit('    udiv    x13, x9,  x12');
-            $this->emit('    msub    x14, x13, x12, x9    # dígito = x9 % 10');
-            $this->emit('    add     x14, x14, #48        # → ASCII');
-            $this->emit('    sub     x10, x10, #1');
-            $this->emit('    strb    w14, [x10]');
-            $this->emit('    add     x11, x11, #1');
-            $this->emit('    mov     x9,  x13             # x9 = x9 / 10');
-            $this->emit('    b       __now_digits');
-            $this->emitBlank();
-            $this->emit('__now_done:');
-            $this->emit('    mov     x0,  x10             # ptr al primer dígito');
-            $this->emit('    mov     x1,  x11             # longitud');
+            $this->emit('    udiv    x11, x14, x12');
+            $this->emit('    msub    x9, x11, x12, x14');
+            $this->emit('    add     x11, x11, #48');
+            $this->emit('    strb    w11, [x10, #2]');
+            $this->emit('    add     x9, x9, #48');
+            $this->emit('    strb    w9, [x10, #3]');
+            $this->emit('    mov     w12, #45');
+            $this->emit('    strb    w12, [x10, #4]');
+
+            // Month (x17) → [5..6]
+            $this->emit('    mov     x12, #10');
+            $this->emit('    udiv    x11, x17, x12');
+            $this->emit('    msub    x14, x11, x12, x17');
+            $this->emit('    add     x11, x11, #48');
+            $this->emit('    strb    w11, [x10, #5]');
+            $this->emit('    add     x14, x14, #48');
+            $this->emit('    strb    w14, [x10, #6]');
+            $this->emit('    mov     w12, #45');
+            $this->emit('    strb    w12, [x10, #7]');
+
+            // Day (x18) → [8..9]
+            $this->emit('    mov     x12, #10');
+            $this->emit('    udiv    x11, x18, x12');
+            $this->emit('    msub    x9, x11, x12, x18');
+            $this->emit('    add     x11, x11, #48');
+            $this->emit('    strb    w11, [x10, #8]');
+            $this->emit('    add     x9, x9, #48');
+            $this->emit('    strb    w9, [x10, #9]');
+            $this->emit('    mov     w12, #32');
+            $this->emit('    strb    w12, [x10, #10]');
+
+            // Hour (x3)
+            $this->emit('    mov     x12, #10');
+            $this->emit('    udiv    x11, x3, x12');
+            $this->emit('    msub    x14, x11, x12, x3');
+            $this->emit('    add     x11, x11, #48');
+            $this->emit('    strb    w11, [x10, #11]');
+            $this->emit('    add     x14, x14, #48');
+            $this->emit('    strb    w14, [x10, #12]');
+            $this->emit('    mov     w12, #58');
+            $this->emit('    strb    w12, [x10, #13]');
+
+            // Minute (x4)
+            $this->emit('    mov     x12, #10');
+            $this->emit('    udiv    x11, x4, x12');
+            $this->emit('    msub    x14, x11, x12, x4');
+            $this->emit('    add     x11, x11, #48');
+            $this->emit('    strb    w11, [x10, #14]');
+            $this->emit('    add     x14, x14, #48');
+            $this->emit('    strb    w14, [x10, #15]');
+            $this->emit('    mov     w12, #58');
+            $this->emit('    strb    w12, [x10, #16]');
+
+            // Second (x5)
+            $this->emit('    mov     x12, #10');
+            $this->emit('    udiv    x11, x5, x12');
+            $this->emit('    msub    x14, x11, x12, x5');
+            $this->emit('    add     x11, x11, #48');
+            $this->emit('    strb    w11, [x10, #17]');
+            $this->emit('    add     x14, x14, #48');
+            $this->emit('    strb    w14, [x10, #18]');
+            $this->emit('    mov     w12, #0');
+            $this->emit('    strb    w12, [x10, #19]');
+            $this->emit('    mov     x0,  x10             # ptr al buffer');
+            $this->emit('    mov     x1,  #19             # longitud fija');
             $this->emitBlank();
             $this->emit('    ldp     x29, x30, [sp, #0]');
-            $this->emit('    add     sp,  sp,  #64');
+            $this->emit('    add     sp,  sp,  #96');
             $this->emit('    ret');
             $this->emitBlank();
         }
 
-        // ── __pow_int ─────────────────────────────────────────────────────────
-        // Potencia entera: x0=base, x1=exp → x0 = base^exp
-        // Implementación iterativa: result=1; while(exp>0) { result*=base; exp-- }
         if ($this->needsPow) {
-            $this->emitBlank();
             $this->emit('# ── __pow_int : x0=base, x1=exp → x0 = base^exp ──────');
             $this->emit('__pow_int:');
             $this->emit('    sub     sp,  sp,  #32');
@@ -2377,6 +2779,31 @@ class ARM64Generator
             if ($high !== 0) {
                 $this->emit("    movk    x0, #{$high}, lsl #16");
             }
+        }
+    }
+
+    /** Emite un inmediato positivo en el registro ARM64 indicado. */
+    private function emitMovImmReg(string $reg, int $v): void
+    {
+        if ($v >= 0 && $v <= 65535) {
+            $this->emit("    mov     {$reg}, #{$v}");
+            return;
+        }
+
+        $low  = $v & 0xFFFF;
+        $mid1 = ($v >> 16) & 0xFFFF;
+        $mid2 = ($v >> 32) & 0xFFFF;
+        $mid3 = ($v >> 48) & 0xFFFF;
+
+        $this->emit(sprintf('    movz    %s, #0x%04X', $reg, $low));
+        if ($mid1 !== 0) {
+            $this->emit(sprintf('    movk    %s, #0x%04X, lsl #16', $reg, $mid1));
+        }
+        if ($mid2 !== 0) {
+            $this->emit(sprintf('    movk    %s, #0x%04X, lsl #32', $reg, $mid2));
+        }
+        if ($mid3 !== 0) {
+            $this->emit(sprintf('    movk    %s, #0x%04X, lsl #48', $reg, $mid3));
         }
     }
 
