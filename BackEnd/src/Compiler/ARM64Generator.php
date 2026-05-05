@@ -434,15 +434,19 @@ class ARM64Generator
             return $n;
         }
 
-        // for
+        // for clásico / while / infinito
         if ($instr instanceof Para) {
             $n = 0;
-            // Variable declarada en el init (ej: var i int = 0  o  i := 0)
             if ($instr->init !== null) {
                 $n += $this->contarEnInstruccion($instr->init);
             }
             $n += $this->contarVariables($instr->bloque);
             return $n;
+        }
+
+        // for rango: 1 slot para el iterador + variables del bloque
+        if ($instr instanceof \App\Instructions\ForRango) {
+            return 1 + $this->contarVariables($instr->bloque);
         }
 
         // switch
@@ -522,6 +526,9 @@ class ARM64Generator
                 break;
             case 'Para':
                 $this->generarPara($instr);
+                break;
+            case 'ForRango':
+                $this->generarForRango($instr);
                 break;
             case 'Segun':
                 $this->generarSegun($instr);
@@ -881,6 +888,47 @@ class ARM64Generator
         $this->emit("    b       {$lblCond}             # siguiente iteración");
 
         // ── fin del for ───────────────────────────────────────────────────────
+        $this->emit("{$lblEnd}:");
+
+        array_pop($this->breakLabels);
+        array_pop($this->continueLabels);
+    }
+
+    private function generarForRango(object $instr): void
+    {
+        $lblCond = $this->ctx->newLabel('fr_cond');
+        $lblPost = $this->ctx->newLabel('fr_post');
+        $lblEnd  = $this->ctx->newLabel('fr_end');
+
+        $this->breakLabels[]    = $lblEnd;
+        $this->continueLabels[] = $lblPost;
+
+        // Allocate iterator variable slot
+        $offset = $this->ctx->allocVar($instr->id, 'ENTERO');
+
+        // Evaluate start → store in iterator slot
+        $this->emit("    // for {$instr->id} in range (inclusive)");
+        $this->generarExpresion($instr->start);
+        $this->emit("    str     x0, [x29, #{$offset}]   // {$instr->id} = start");
+
+        // Condition: load iterator, evaluate end, compare i <= end
+        $this->emit("{$lblCond}:");
+        $this->generarExpresion($instr->end);
+        $this->emit("    mov     x9, x0                  // x9 = end");
+        $this->emit("    ldr     x0, [x29, #{$offset}]   // x0 = {$instr->id}");
+        $this->emit("    cmp     x0, x9");
+        $this->emit("    b.gt    {$lblEnd}                // i > end → salir");
+
+        // Body
+        $this->generarBloque($instr->bloque);
+
+        // Post: i++
+        $this->emit("{$lblPost}:");
+        $this->emit("    ldr     x0, [x29, #{$offset}]   // x0 = {$instr->id}");
+        $this->emit("    add     x0, x0, #1              // i++");
+        $this->emit("    str     x0, [x29, #{$offset}]   // store {$instr->id}");
+        $this->emit("    b       {$lblCond}               // siguiente iteración");
+
         $this->emit("{$lblEnd}:");
 
         array_pop($this->breakLabels);

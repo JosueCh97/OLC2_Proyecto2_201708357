@@ -224,6 +224,16 @@ interface GolampiVisitor extends ParseTreeVisitor
 	public function visitForClasico(Context\ForClasicoContext $context);
 
 	/**
+	 * Visit a parse tree produced by the `ForRango` labeled alternative
+	 * in {@see GolampiParser::for()}.
+	 *
+	 * @param Context\ForRangoContext $context The parse tree.
+	 *
+	 * @return mixed The visitor result.
+	 */
+	public function visitForRango(Context\ForRangoContext $context);
+
+	/**
 	 * Visit a parse tree produced by {@see GolampiParser::break()}.
 	 *
 	 * @param Context\BreakContext $context The parse tree.

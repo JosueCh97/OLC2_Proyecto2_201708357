@@ -848,10 +848,23 @@ public function visitAsig_compuesta($ctx) {
         $condicion = $this->visit($ctx->expresion());
         $post = $this->visit($ctx->post());
         $bloque = $this->visit($ctx->bloque());
-        
+
         return new \App\Instructions\Para(
             $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
             $init, $condicion, $post, $bloque
+        );
+    }
+
+    // --- FOR RANGO: for i in 1..4 { ... } ---
+    public function visitForRango($ctx) {
+        $id     = $ctx->IDNAME()->getText();
+        $start  = $this->visit($ctx->expresion(0));
+        $end    = $this->visit($ctx->expresion(1));
+        $bloque = $this->visit($ctx->bloque());
+
+        return new \App\Instructions\ForRango(
+            $ctx->getStart()->getLine(), $ctx->getStart()->getCharPositionInLine(),
+            $id, $start, $end, $bloque
         );
     }
 

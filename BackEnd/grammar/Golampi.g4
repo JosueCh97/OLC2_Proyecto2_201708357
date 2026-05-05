@@ -76,6 +76,7 @@ for:
       TKFOR bloque                                          #ForInfinito
     | TKFOR expresion bloque                                #ForMientras
     | TKFOR init ';' expresion ';' post bloque              #ForClasico
+    | TKFOR IDNAME TKIN expresion RANGO expresion bloque    #ForRango
     ;
 
 
