@@ -2252,46 +2252,41 @@ class ARM64Generator
         return 'BOOLEANO';
     }
 
-    private function generarRango(object $expr): string
+   private function generarRango(object $expr): string
     {
-        $lblFalse = $this->ctx->newLabel('rng_false');
-        $lblEnd   = $this->ctx->newLabel('rng_end');
+    
+       $lblFalse = $this->ctx->newLabel('rng_false');         
+                $lblEnd = $this->ctx->newLabel('rng_end');
 
-        $slot = $this->ctx->getScratchSaveOffset($this->scratchDepth);
-        $this->scratchDepth++;
+                $slot = $this->ctx->getScratchSaveOffset($this->scratchDepth);
+                $this->scratchDepth++;
 
-        // 1. Evaluar el valor a comparar → guardarlo en slot
-        $this->generarExpresion($expr->valor);
-        $this->emit("    str     x0, [x29, #{$slot}]   // valor del rango");
+                $tipo = $this->generarExpresion($expr->valor);
+                $this->emit("    str     x0, [x29, #{$slot}]   // valor → slot");
 
-        // 2. Comparar valor >= inicio
-        $this->generarExpresion($expr->inicio);
-        $this->emit("    ldr     x9, [x29, #{$slot}]   // x9 = valor");
-        $this->emit("    cmp     x9, x0                 // valor vs inicio");
-        $this->emit("    b.lt    {$lblFalse}             // valor < inicio → false");
+                $this->generarExpresion($expr->inicio);
+                $this->emit("    ldr     x9, [x29, #{$slot}]   // x9 ← valor");
+                $this->emit('    cmp     x9, x0');
+                $this->emit("    blt     {$lblFalse}          // valor < inicio → false");
+                
+                $this->generarExpresion($expr->fin);
+                $this->emit("    ldr     x9, [x29, #{$slot}]   // x9 ← valor");
+                $this->emit('    cmp     x9, x0');
+                $this->emit("    b.gt     {$lblFalse}          // valor > fin → false");
 
-        // 3. Comparar valor <= fin
-        $this->generarExpresion($expr->fin);
-        $this->emit("    ldr     x9, [x29, #{$slot}]   // x9 = valor");
-        $this->emit("    cmp     x9, x0                 // valor vs fin");
-        $this->emit("    b.gt    {$lblFalse}             // valor > fin → false");
+                $this->emit("    mov   x0, #1 ");
+                $this->emit("    b     {$lblEnd}");
+                $this->emit("{$lblFalse}:");
+                $this->emit("    mov   x0, #0 ");
+                $this->emit("{$lblEnd}:");
 
-        // 4. Está en rango → true
-        $this->emit("    mov     x0, #1");
-        $this->emit("    b       {$lblEnd}");
-        $this->emit("{$lblFalse}:");
-        $this->emit("    mov     x0, #0");
-        $this->emit("{$lblEnd}:");
-
-        // 5. Invertir si es "not in"
-        if ($expr->negado) {
-            $this->emit("    eor     x0, x0, #1         // not in → invertir");
-        }
-
-        $this->scratchDepth--;
-        return 'BOOLEANO';
+                if ($expr->negado){
+                    $this->emit ("    eor    x0, x0 #1  invertir " );
+                }
+                $this->scratchDepth--;
+                return 'BOOLEANO';
     }
-
+    
     private function generarLogico(object $expr): string
     {
         $signo = $expr->signo;
