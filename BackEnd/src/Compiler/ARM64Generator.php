@@ -338,6 +338,10 @@ class ARM64Generator
                     $this->ctx->markPtrArray($param->id, $dims);
                 } else {
                     $offset = $this->ctx->allocVar($param->id, $tipoParam);
+                    // Puntero escalar (*int32, *bool…): auto-deref en lectura/escritura
+                    if (!empty($param->isPuntero)) {
+                        $this->ctx->markPtrScalar($param->id);
+                    }
                 }
                 $this->emit("    str     x{$i}, [x29, #{$offset}]  // param {$param->id} ({$tipoParam})");
             }
@@ -787,7 +791,13 @@ class ARM64Generator
                 $this->emit('    mov     x0, #0');
             }
 
-            $this->emit("    str     x0, [x29, #{$offset}]  // {$nombre} = ...");
+            // Puntero escalar: escribir a través del puntero, no al slot local
+            if ($this->ctx->isPtrScalar($nombre)) {
+                $this->emit("    ldr     x9, [x29, #{$offset}]  // dirección de *{$nombre}");
+                $this->emit("    str     x0, [x9]               // *{$nombre} = ...");
+            } else {
+                $this->emit("    str     x0, [x29, #{$offset}]  // {$nombre} = ...");
+            }
         }
     }
 
@@ -2037,6 +2047,14 @@ class ARM64Generator
         }
 
         $tipo = $this->ctx->getVarType($nombre);
+
+        // Puntero escalar: el slot contiene la dirección del original → deref automático
+        if ($this->ctx->isPtrScalar($nombre)) {
+            $this->emit("    ldr     x9, [x29, #{$offset}]  // ptr {$nombre} → dirección");
+            $this->emit("    ldr     x0, [x9]               // *{$nombre}");
+            return $tipo;
+        }
+
         $this->emit("    ldr     x0, [x29, #{$offset}]  // acceso {$nombre}");
 
         if ($tipo === 'CADENA') {
@@ -2227,6 +2245,12 @@ class ARM64Generator
 
         $this->scratchDepth--;
 
+        // nil == nil → NIL (no booleano); fmt.Println lo imprime como <nil>
+        if ($tipoL === 'NIL' && $tipoR === 'NIL') {
+            $this->emit('    mov     x0, #0   // nil comparison → NIL');
+            return 'NIL';
+        }
+
         $cond = match ($expr->signo) {
             '==' => 'eq',
             '!=' => 'ne',
@@ -2252,39 +2276,45 @@ class ARM64Generator
         return 'BOOLEANO';
     }
 
-   private function generarRango(object $expr): string
+    private function generarRango(object $expr): string
     {
-    
-       $lblFalse = $this->ctx->newLabel('rng_false');         
-                $lblEnd = $this->ctx->newLabel('rng_end');
+       $slvlFalse = $this->ctx->newLabel('rng_false');
+    $lblEnd = $this->ctx->newLabel('rng_end');
 
-                $slot = $this->ctx->getScratchSaveOffset($this->scratchDepth);
-                $this->scratchDepth++;
+    $slot = $this->ctx->getScratchSaveOffset($this->scratchDepth);
+    $this ->scratchDepth++;
 
-                $tipo = $this->generarExpresion($expr->valor);
-                $this->emit("    str     x0, [x29, #{$slot}]   // valor → slot");
 
-                $this->generarExpresion($expr->inicio);
-                $this->emit("    ldr     x9, [x29, #{$slot}]   // x9 ← valor");
-                $this->emit('    cmp     x9, x0');
-                $this->emit("    blt     {$lblFalse}          // valor < inicio → false");
-                
-                $this->generarExpresion($expr->fin);
-                $this->emit("    ldr     x9, [x29, #{$slot}]   // x9 ← valor");
-                $this->emit('    cmp     x9, x0');
-                $this->emit("    b.gt     {$lblFalse}          // valor > fin → false");
+    $this->generarExpresion($expr->valor);
+    $this->emit("    str     x0, [x29, #{$slot}]   // valor → slot");
 
-                $this->emit("    mov   x0, #1 ");
-                $this->emit("    b     {$lblEnd}");
-                $this->emit("{$lblFalse}:");
-                $this->emit("    mov   x0, #0 ");
-                $this->emit("{$lblEnd}:");
+    $this->generarExpresion($expr->fin);
+    $this->emit("    ldr     x9, [x29, #{$slot}]   // x9 ← valor");
+    $this->emit('    cmp     x9, x0');
+    $this->emit("    b.gt    {$slvlFalse}          // valor > fin → false");
 
-                if ($expr->negado){
-                    $this->emit ("    eor    x0, x0 #1  invertir " );
-                }
-                $this->scratchDepth--;
-                return 'BOOLEANO';
+
+    $this ->emit("mov     x0, #1");
+    $this->emit("    b       {$lblEnd}");
+    $this->emit("{$slvlFalse}:");
+    $this->emit("    mov     x0, #0");
+    $this->emit("{$lblEnd}:");
+
+
+    if ($expr->negado){
+        $this->emit('  eor        x0, x0, #1    // negar resultado');
+
+
+    }
+    $this->scratchDepth--;
+    return 'BOOLEANO';
+
+
+
+
+
+
+
     }
     
     private function generarLogico(object $expr): string

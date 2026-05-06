@@ -51,6 +51,9 @@ class ARM64Context
     /** Conjunto de variables que son punteros a arreglo (param isPuntero con dims). */
     private array $ptrArrayVars = [];
 
+    /** Conjunto de variables que son punteros escalares (*int32, *bool, etc.). */
+    private array $ptrScalarVars = [];
+
     /** nombre_variable => offset del slot que almacena la longitud de la cadena (para substr). */
     private array $strLenSlots = [];
 
@@ -176,6 +179,18 @@ class ARM64Context
         return $this->ptrArrayVars[$name] ?? null;
     }
 
+    /** Marca una variable como puntero escalar (*int32, *bool, etc.). */
+    public function markPtrScalar(string $name): void
+    {
+        $this->ptrScalarVars[$name] = true;
+    }
+
+    /** Devuelve true si la variable es un puntero escalar. */
+    public function isPtrScalar(string $name): bool
+    {
+        return isset($this->ptrScalarVars[$name]);
+    }
+
     /**
      * Devuelve el offset de una variable en el frame actual,
      * o null si no existe.
@@ -258,8 +273,9 @@ class ARM64Context
         $this->varOffsets   = [];
         $this->varTypes     = [];
         $this->arrayDims    = [];
-        $this->ptrArrayVars = [];
-        $this->strLenSlots  = [];
+        $this->ptrArrayVars  = [];
+        $this->ptrScalarVars = [];
+        $this->strLenSlots   = [];
     }
 
     // ── Helpers internos ──────────────────────────────────────────────────────
